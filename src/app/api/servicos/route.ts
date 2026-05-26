@@ -25,13 +25,16 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const services = await prisma.service.findMany({
-    where: { active: true },
-    include: { prices: true },
-    orderBy: { name: "asc" },
-  });
-
-  return NextResponse.json(services);
+  try {
+    const services = await prisma.service.findMany({
+      where: { active: true },
+      include: { prices: true },
+      orderBy: { name: "asc" },
+    });
+    return NextResponse.json(services);
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Erro ao listar serviços" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -42,20 +45,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const data = serviceSchema.parse(body);
+  let data;
+  try {
+    data = serviceSchema.parse(await req.json());
+  } catch (e: any) {
+    const detail = e?.issues?.map((i: any) => `${i.path.join(".")}: ${i.message}`).join("; ") || e?.message;
+    return NextResponse.json({ error: `Dados inválidos: ${detail}` }, { status: 400 });
+  }
 
-  const service = await prisma.service.create({
-    data: {
-      name: data.name,
-      description: data.description,
-      basePrice: data.basePrice,
-      prices: {
-        create: data.prices.map((p) => ({ category: p.category as any, price: p.price })),
+  try {
+    const service = await prisma.service.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        basePrice: data.basePrice,
+        prices: {
+          create: data.prices.map((p) => ({ category: p.category as any, price: p.price })),
+        },
       },
-    },
-    include: { prices: true },
-  });
-
-  return NextResponse.json(service, { status: 201 });
+      include: { prices: true },
+    });
+    return NextResponse.json(service, { status: 201 });
+  } catch (e: any) {
+    const msg = e?.message || "Erro ao criar serviço";
+    const hint = msg.includes("service_prices") || msg.includes("does not exist")
+      ? " (Dica: rode 'Sincronizar Schema' no /admin para criar as tabelas novas.)"
+      : "";
+    return NextResponse.json({ error: msg + hint }, { status: 500 });
+  }
 }
