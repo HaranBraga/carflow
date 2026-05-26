@@ -63,8 +63,6 @@ export default function EntradaPage() {
     CHECKLIST_AREAS.map((area) => ({ area, hasIssue: false, notes: "" }))
   );
   const [opportunities, setOpportunities] = useState<string[]>([]);
-  const [washerId, setWasherId] = useState("");
-  const [washers, setWashers] = useState<any[]>([]);
   const [orderNotes, setOrderNotes] = useState("");
 
   async function searchPlate() {
@@ -86,23 +84,37 @@ export default function EntradaPage() {
     }
   }
 
-  async function loadServicesAndWashers() {
-    const [svcRes, wRes] = await Promise.all([
-      fetch("/api/servicos"),
-      fetch("/api/lavadores"),
-    ]);
-    setAvailableServices(await svcRes.json());
-    setWashers(await wRes.json());
+  async function loadServices() {
+    const res = await fetch("/api/servicos");
+    setAvailableServices(await res.json());
   }
 
   function goToStep(s: Step) {
-    if (s === "servicos") loadServicesAndWashers();
+    if (s === "servicos") loadServices();
     setStep(s);
+  }
+
+  function priceForService(svc: any): number {
+    const cat = vehicle.category || existingVehicle?.category;
+    if (!cat) return Number(svc.basePrice);
+    if (svc.prices && svc.prices.length > 0) {
+      const match = svc.prices.find((p: any) => p.category === cat);
+      if (match) return Number(match.price);
+      return Number(svc.basePrice);
+    }
+    return Number(svc.basePrice);
+  }
+
+  function serviceAppliesToCategory(svc: any): boolean {
+    if (!svc.prices || svc.prices.length === 0) return true;
+    const cat = vehicle.category || existingVehicle?.category;
+    if (!cat) return true;
+    return svc.prices.some((p: any) => p.category === cat);
   }
 
   function addService(svc: any) {
     if (services.find((s) => s.serviceId === svc.id)) return;
-    setServices([...services, { serviceId: svc.id, name: svc.name, unitPrice: Number(svc.basePrice), quantity: 1, discount: 0 }]);
+    setServices([...services, { serviceId: svc.id, name: svc.name, unitPrice: priceForService(svc), quantity: 1, discount: 0 }]);
   }
 
   function removeService(serviceId: string) {
@@ -145,13 +157,18 @@ export default function EntradaPage() {
             isUber: customer.isUber,
           }),
         });
+        const cData = await cRes.json().catch(() => ({}));
         if (!cRes.ok) {
-          const e = await cRes.json().catch(() => ({}));
-          throw new Error(e.error || "Falha ao cadastrar cliente");
+          if (cRes.status === 409 && cData.customer?.id) {
+            customerId = cData.customer.id;
+            setCustomer((c) => ({ ...c, id: customerId, name: cData.customer.name }));
+          } else {
+            throw new Error(cData.error || "Falha ao cadastrar cliente");
+          }
+        } else {
+          customerId = cData.id;
+          setCustomer((c) => ({ ...c, id: customerId }));
         }
-        const cData = await cRes.json();
-        customerId = cData.id;
-        setCustomer((c) => ({ ...c, id: customerId }));
       }
 
       if (!vehicleId) {
@@ -178,7 +195,7 @@ export default function EntradaPage() {
         .map((sid) => {
           const svc = availableServices.find((s) => s.id === sid);
           if (!svc) return null;
-          return { description: svc.name, estimatedValue: Number(svc.basePrice) };
+          return { description: svc.name, estimatedValue: priceForService(svc) };
         })
         .filter(Boolean);
 
@@ -187,7 +204,6 @@ export default function EntradaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vehicleId,
-          washerId: washerId || undefined,
           notes: orderNotes,
           services: services.map((s) => ({
             serviceId: s.serviceId,
@@ -373,17 +389,25 @@ export default function EntradaPage() {
         <Card>
           <CardHeader><CardTitle>Serviços</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Preços ajustados para a categoria <strong>{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</strong>
+            </p>
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-              {availableServices.map((svc) => (
+              {availableServices.filter(serviceAppliesToCategory).map((svc) => (
                 <button
                   key={svc.id}
                   onClick={() => addService(svc)}
                   className={`text-left p-2 rounded-lg border text-sm transition-colors ${services.find((s) => s.serviceId === svc.id) ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"}`}
                 >
                   <p className="font-medium truncate">{svc.name}</p>
-                  <p className="text-xs text-muted-foreground">{formatCurrency(svc.basePrice)}</p>
+                  <p className="text-xs text-muted-foreground">{formatCurrency(priceForService(svc))}</p>
                 </button>
               ))}
+              {availableServices.filter(serviceAppliesToCategory).length === 0 && (
+                <p className="col-span-2 text-xs text-muted-foreground text-center py-4">
+                  Nenhum serviço cadastrado para essa categoria. Cadastre em Serviços.
+                </p>
+              )}
             </div>
 
             {services.length > 0 && (
@@ -405,16 +429,6 @@ export default function EntradaPage() {
                 </div>
               </div>
             )}
-
-            <div>
-              <Label>Lavador</Label>
-              <Select value={washerId} onValueChange={setWasherId}>
-                <SelectTrigger><SelectValue placeholder="Selecionar lavador..." /></SelectTrigger>
-                <SelectContent>
-                  {washers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
 
             <div>
               <Label>Observações</Label>
@@ -469,10 +483,11 @@ export default function EntradaPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {availableServices
+                    .filter(serviceAppliesToCategory)
                     .filter((svc) => !opportunities.includes(svc.id))
                     .map((svc) => (
                       <SelectItem key={svc.id} value={svc.id}>
-                        {svc.name} — {formatCurrency(Number(svc.basePrice))}
+                        {svc.name} — {formatCurrency(priceForService(svc))}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -484,7 +499,7 @@ export default function EntradaPage() {
                     <div key={svc.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
                       <div>
                         <p className="text-sm font-medium">{svc.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatCurrency(Number(svc.basePrice))}</p>
+                        <p className="text-xs text-muted-foreground">{formatCurrency(priceForService(svc))}</p>
                       </div>
                       <button onClick={() => removeOpportunity(svc.id)} className="text-destructive hover:opacity-70">
                         <X className="w-4 h-4" />
@@ -552,7 +567,7 @@ export default function EntradaPage() {
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                 <p className="text-xs font-medium text-yellow-700 mb-1">Oportunidades futuras:</p>
                 <ul className="text-xs text-yellow-700 space-y-0.5">
-                  {opportunityServices.map((svc: any) => <li key={svc.id}>• {svc.name} ({formatCurrency(Number(svc.basePrice))})</li>)}
+                  {opportunityServices.map((svc: any) => <li key={svc.id}>• {svc.name} ({formatCurrency(priceForService(svc))})</li>)}
                 </ul>
               </div>
             )}

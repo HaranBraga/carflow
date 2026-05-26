@@ -15,7 +15,7 @@ datasource db {
 model Customer {
   id          String      @id @default(cuid())
   name        String
-  phone       String
+  phone       String      @unique
   gender      Gender      @default(NOT_INFORMED)
   isUber      Boolean     @default(false)
   notes       String?
@@ -63,28 +63,29 @@ enum VehicleCategory {
   TAPETE_RESIDENCIAL
 }
 
-model ServiceCategory {
-  id     String  @id @default(cuid())
-  name   String
-  active Boolean @default(true)
-
-  services Service[]
-
-  @@map("service_categories")
-}
-
 model Service {
   id          String  @id @default(cuid())
-  categoryId  String?
   name        String
   description String?
   basePrice   Decimal @db.Decimal(10, 2)
   active      Boolean @default(true)
 
-  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
+  prices     ServicePrice[]
   orderItems OrderItem[]
 
   @@map("services")
+}
+
+model ServicePrice {
+  id        String          @id @default(cuid())
+  serviceId String
+  category  VehicleCategory
+  price     Decimal         @db.Decimal(10, 2)
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, category])
+  @@map("service_prices")
 }
 
 model ServiceOrder {

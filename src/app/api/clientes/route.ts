@@ -10,6 +10,10 @@ const customerSchema = z.object({
   notes: z.string().optional(),
 });
 
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
 export async function GET(req: NextRequest) {
   let prisma;
   try {
@@ -54,8 +58,19 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const data = customerSchema.parse(body);
+  const phone = normalizePhone(data.phone);
 
-  const customer = await prisma.customer.create({ data });
+  const existing = await prisma.customer.findUnique({ where: { phone } });
+  if (existing) {
+    return NextResponse.json({
+      error: `Cliente já cadastrado com esse telefone: ${existing.name}`,
+      customer: existing,
+    }, { status: 409 });
+  }
+
+  const customer = await prisma.customer.create({
+    data: { ...data, phone },
+  });
 
   return NextResponse.json(customer, { status: 201 });
 }

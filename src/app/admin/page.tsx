@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Building2, Plus, LogOut, Users, Lock, Eye, EyeOff, Database, MessageCircle, Pencil, Trash2, Power } from "lucide-react";
+import { Building2, Plus, LogOut, Users, Lock, Eye, EyeOff, Database, MessageCircle, Pencil, Trash2, Power, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -160,6 +160,19 @@ export default function AdminPage() {
     loadTenants();
   }
 
+  async function migrateTenant(t: Tenant) {
+    if (!confirm(`Sincronizar schema da empresa "${t.name}"?\n\nIsso vai limpar clientes duplicados pelo telefone (mesclando os mais novos no mais antigo) e aplicar mudanças de schema do banco da empresa.`)) return;
+    setFormError("");
+    setFormSuccess("");
+    const res = await fetch(`/api/admin/tenants/${t.id}/migrate`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setFormSuccess((data.log || []).join("\n") || `Schema de "${t.name}" sincronizado.`);
+    } else {
+      setFormError([data.error, ...(data.log || [])].filter(Boolean).join("\n"));
+    }
+  }
+
   async function deleteTenant(t: Tenant) {
     if (!confirm(`Excluir empresa "${t.name}"? O banco de dados dela NÃO será removido — apenas o registro no master.`)) return;
     const res = await fetch(`/api/admin/tenants/${t.id}`, { method: "DELETE" });
@@ -240,8 +253,13 @@ export default function AdminPage() {
         </div>
 
         {formSuccess && (
-          <div className="bg-green-900/40 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-sm">
+          <div className="bg-green-900/40 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-sm whitespace-pre-wrap">
             {formSuccess}
+          </div>
+        )}
+        {formError && !showForm && (
+          <div className="bg-red-900/40 border border-red-700 text-red-300 px-4 py-3 rounded-lg text-sm whitespace-pre-wrap">
+            {formError}
           </div>
         )}
 
@@ -421,6 +439,10 @@ export default function AdminPage() {
                       </p>
                     </div>
                     <div className="flex gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" onClick={() => migrateTenant(t)}
+                        className="text-blue-400 hover:text-blue-300" title="Sincronizar schema (limpa duplicatas + aplica migrations)">
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => startEdit(t)}
                         className="text-gray-400 hover:text-white" title="Editar">
                         <Pencil className="w-4 h-4" />
