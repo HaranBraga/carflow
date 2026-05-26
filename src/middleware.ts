@@ -1,26 +1,39 @@
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export default auth((req) => {
-  const { nextUrl, auth: session } = req;
-  const isLoggedIn = !!session;
-  const isAuthPage = nextUrl.pathname.startsWith("/login");
-  const isApiAuth = nextUrl.pathname.startsWith("/api/auth");
-  const isFeedbackPublic = nextUrl.pathname.startsWith("/avaliacao");
+const SESSION_COOKIE_NAMES = [
+  "authjs.session-token",
+  "__Secure-authjs.session-token",
+  "next-auth.session-token",
+  "__Secure-next-auth.session-token",
+];
 
-  if (isApiAuth || isFeedbackPublic) return NextResponse.next();
+function hasSessionCookie(req: NextRequest): boolean {
+  return SESSION_COOKIE_NAMES.some((name) => req.cookies.has(name));
+}
 
-  if (isAuthPage) {
-    if (isLoggedIn) return NextResponse.redirect(new URL("/dashboard", nextUrl));
+export default function middleware(req: NextRequest) {
+  const { nextUrl } = req;
+  const path = nextUrl.pathname;
+
+  if (
+    path.startsWith("/api/auth") ||
+    path.startsWith("/api/admin") ||
+    path.startsWith("/admin") ||
+    path.startsWith("/avaliacao") ||
+    path === "/login"
+  ) {
+    if (path === "/login" && hasSessionCookie(req)) {
+      return NextResponse.redirect(new URL("/", nextUrl));
+    }
     return NextResponse.next();
   }
 
-  if (!isLoggedIn) {
+  if (!hasSessionCookie(req)) {
     return NextResponse.redirect(new URL("/login", nextUrl));
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.png|.*\\.jpg|.*\\.svg).*)"],
