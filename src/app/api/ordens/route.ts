@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const tenantId = (session.user as any).tenantId;
-  const managerId = session.user.id!;
+  const managerId = (session.user as any).id as string;
 
   const body = await req.json();
   const data = orderSchema.parse(body);
