@@ -69,7 +69,7 @@ export default function LavagemPage() {
           <CardContent className="text-center py-16">
             <Car className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-30" />
             <p className="text-muted-foreground">Nenhum veículo em atendimento</p>
-            <Button className="mt-4" onClick={() => window.location.href = "/dashboard/entrada"}>
+            <Button className="mt-4" onClick={() => window.location.href = "/entrada"}>
               Registrar Entrada
             </Button>
           </CardContent>

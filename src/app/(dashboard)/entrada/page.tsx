@@ -152,7 +152,7 @@ export default function EntradaPage() {
         }),
       });
 
-      router.push("/dashboard/lavagem");
+      router.push("/lavagem");
     } finally {
       setLoading(false);
     }
