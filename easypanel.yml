@@ -1,0 +1,38 @@
+# Easypanel deployment configuration
+# Deploy no Easypanel: https://easypanel.io
+#
+# 1. Crie um novo projeto no Easypanel
+# 2. Adicione um serviço PostgreSQL (database) → copie a connection string
+# 3. Adicione um serviço App (source: GitHub ou Docker)
+# 4. Configure as variáveis de ambiente abaixo
+
+services:
+  carflow:
+    type: app
+    image: your-registry/carflow-erp:latest  # ou conecte ao repositório GitHub
+    port: 3000
+    env:
+      DATABASE_URL: "${DATABASE_URL}"        # Fornecido pelo Easypanel (PostgreSQL)
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"  # Gere com: openssl rand -base64 32
+      NEXTAUTH_URL: "https://seu-dominio.com"
+      NEXT_PUBLIC_APP_URL: "https://seu-dominio.com"
+      EVOLUTION_API_URL: "${EVOLUTION_API_URL}"
+      EVOLUTION_API_KEY: "${EVOLUTION_API_KEY}"
+      EVOLUTION_INSTANCE: "${EVOLUTION_INSTANCE}"
+      OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
+      OPENWEATHER_LAT: "-23.5505"
+      OPENWEATHER_LON: "-46.6333"
+      NEXT_PUBLIC_INSTAGRAM_URL: "https://instagram.com/seu_perfil"
+    healthcheck:
+      path: /api/health
+      interval: 30s
+
+# Variáveis obrigatórias para configurar no Easypanel:
+# - DATABASE_URL: postgres://user:pass@host:5432/dbname
+# - NEXTAUTH_SECRET: string aleatória segura (mín. 32 chars)
+# - NEXTAUTH_URL: URL pública do app (com https)
+#
+# Opcionais (funcionalidades extras):
+# - EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE: WhatsApp
+# - OPENWEATHER_API_KEY: Previsão do tempo
+# - NEXT_PUBLIC_INSTAGRAM_URL: Link do Instagram no QR code de feedback
