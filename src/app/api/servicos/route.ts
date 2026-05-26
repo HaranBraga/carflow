@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
 
 const serviceSchema = z.object({
@@ -10,13 +9,16 @@ const serviceSchema = z.object({
   categoryId: z.string().optional(),
 });
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+export async function GET() {
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const services = await prisma.service.findMany({
-    where: { tenantId, active: true },
+    where: { active: true },
     include: { category: true },
     orderBy: { name: "asc" },
   });
@@ -25,16 +27,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
   const data = serviceSchema.parse(body);
 
-  const service = await prisma.service.create({
-    data: { ...data, tenantId },
-  });
+  const service = await prisma.service.create({ data });
 
   return NextResponse.json(service, { status: 201 });
 }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
 import { formatPlate } from "@/lib/utils";
 
@@ -14,9 +13,12 @@ const vehicleSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const plate = searchParams.get("plate");
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   if (plate) {
     const vehicle = await prisma.vehicle.findFirst({
-      where: { tenantId, plate: formatPlate(plate) },
+      where: { plate: formatPlate(plate) },
       include: { customer: true },
     });
     return NextResponse.json(vehicle);
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   if (customerId) {
     const vehicles = await prisma.vehicle.findMany({
-      where: { tenantId, customerId },
+      where: { customerId },
       include: {
         orders: {
           orderBy: { arrivedAt: "desc" },
@@ -48,15 +50,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
   const data = vehicleSchema.parse(body);
 
   const existing = await prisma.vehicle.findFirst({
-    where: { tenantId, plate: formatPlate(data.plate) },
+    where: { plate: formatPlate(data.plate) },
     include: { customer: true },
   });
 
@@ -65,7 +70,7 @@ export async function POST(req: NextRequest) {
   }
 
   const vehicle = await prisma.vehicle.create({
-    data: { ...data, plate: formatPlate(data.plate), tenantId },
+    data: { ...data, plate: formatPlate(data.plate) },
     include: { customer: true },
   });
 

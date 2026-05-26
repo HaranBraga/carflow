@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
 import { startOfDay, endOfDay } from "date-fns";
 
@@ -13,24 +12,23 @@ const cashFlowSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const dateStr = searchParams.get("date") || new Date().toISOString().split("T")[0];
   const date = new Date(dateStr);
 
   const where = {
-    tenantId,
     date: { gte: startOfDay(date), lte: endOfDay(date) },
   };
 
   const [entries, income, expense] = await Promise.all([
-    prisma.cashFlow.findMany({
-      where,
-      orderBy: { date: "asc" },
-    }),
+    prisma.cashFlow.findMany({ where, orderBy: { date: "asc" } }),
     prisma.cashFlow.aggregate({ where: { ...where, type: "INCOME" }, _sum: { amount: true } }),
     prisma.cashFlow.aggregate({ where: { ...where, type: "EXPENSE" }, _sum: { amount: true } }),
   ]);
@@ -44,16 +42,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
   const data = cashFlowSchema.parse(body);
 
-  const entry = await prisma.cashFlow.create({
-    data: { ...data, tenantId },
-  });
+  const entry = await prisma.cashFlow.create({ data });
 
   return NextResponse.json(entry, { status: 201 });
 }

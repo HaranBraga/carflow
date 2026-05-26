@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { prisma } from "@/lib/prisma";
+import { masterPrisma } from "@/lib/prisma-master";
 import bcrypt from "bcryptjs";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -14,7 +14,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
+        const user = await masterPrisma.user.findUnique({
           where: { username: credentials.username as string },
           include: { tenant: true },
         });
@@ -30,12 +30,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         return {
           id: user.id,
-          email: user.email,
+          email: user.email ?? `${user.username}@carflow.local`,
           name: user.name,
           role: user.role,
           tenantId: user.tenantId,
           tenantSlug: user.tenant.slug,
           tenantName: user.tenant.name,
+          databaseUrl: user.tenant.databaseUrl,
+          evolutionApiUrl: user.tenant.evolutionApiUrl,
+          evolutionApiKey: user.tenant.evolutionApiKey,
+          evolutionInstance: user.tenant.evolutionInstance,
         };
       },
     }),
@@ -43,21 +47,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.role = (user as any).role;
-        token.tenantId = (user as any).tenantId;
-        token.tenantSlug = (user as any).tenantSlug;
-        token.tenantName = (user as any).tenantName;
+        const u = user as any;
+        token.id = u.id;
+        token.role = u.role;
+        token.tenantId = u.tenantId;
+        token.tenantSlug = u.tenantSlug;
+        token.tenantName = u.tenantName;
+        token.databaseUrl = u.databaseUrl;
+        token.evolutionApiUrl = u.evolutionApiUrl;
+        token.evolutionApiKey = u.evolutionApiKey;
+        token.evolutionInstance = u.evolutionInstance;
       }
       return token;
     },
     async session({ session, token }) {
       if (token) {
-        session.user.id = token.id as string;
-        (session.user as any).role = token.role;
-        (session.user as any).tenantId = token.tenantId;
-        (session.user as any).tenantSlug = token.tenantSlug;
-        (session.user as any).tenantName = token.tenantName;
+        const s = session.user as any;
+        s.id = token.id;
+        s.role = token.role;
+        s.tenantId = token.tenantId;
+        s.tenantSlug = token.tenantSlug;
+        s.tenantName = token.tenantName;
+        s.databaseUrl = token.databaseUrl;
+        s.evolutionApiUrl = token.evolutionApiUrl;
+        s.evolutionApiKey = token.evolutionApiKey;
+        s.evolutionInstance = token.evolutionInstance;
       }
       return session;
     },

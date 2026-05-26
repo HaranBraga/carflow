@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { startOfMonth, endOfMonth, subDays } from "date-fns";
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const now = new Date();
   const monthStart = startOfMonth(now);
@@ -14,58 +16,49 @@ export async function GET() {
   const thirtyDaysAgo = subDays(now, 30);
 
   const [topCustomersRaw, topServicesRaw, byCategoryRaw, ticketRaw, inactiveCount] = await Promise.all([
-    // Top customers do mês por valor
     prisma.$queryRaw<any[]>`
       SELECT c.id as "customerId", c.name, SUM(so."totalAmount") as total
       FROM service_orders so
       JOIN vehicles v ON so."vehicleId" = v.id
       JOIN customers c ON v."customerId" = c.id
-      WHERE so."tenantId" = ${tenantId}
-        AND so."arrivedAt" >= ${monthStart}
+      WHERE so."arrivedAt" >= ${monthStart}
         AND so."arrivedAt" <= ${monthEnd}
         AND so.status IN ('FINISHED', 'DELIVERED')
       GROUP BY c.id, c.name
       ORDER BY total DESC
       LIMIT 10
     `,
-    // Top serviços por receita
     prisma.$queryRaw<any[]>`
       SELECT s.name as "serviceName", COUNT(oi.id) as count, SUM(oi.total) as revenue
       FROM order_items oi
       JOIN services s ON oi."serviceId" = s.id
       JOIN service_orders so ON oi."orderId" = so.id
-      WHERE so."tenantId" = ${tenantId}
-        AND so."arrivedAt" >= ${monthStart}
+      WHERE so."arrivedAt" >= ${monthStart}
       GROUP BY s.name
       ORDER BY revenue DESC
       LIMIT 10
     `,
-    // Por categoria de veículo
     prisma.$queryRaw<any[]>`
       SELECT v.category, COUNT(so.id) as count
       FROM service_orders so
       JOIN vehicles v ON so."vehicleId" = v.id
-      WHERE so."tenantId" = ${tenantId}
-        AND so."arrivedAt" >= ${monthStart}
+      WHERE so."arrivedAt" >= ${monthStart}
       GROUP BY v.category
       ORDER BY count DESC
     `,
-    // Ticket médio
     prisma.serviceOrder.aggregate({
-      where: { tenantId, status: { in: ["FINISHED", "DELIVERED"] } },
+      where: { status: { in: ["FINISHED", "DELIVERED"] } },
       _avg: { totalAmount: true },
     }),
-    // Clientes inativos (sem visita em 30 dias)
     prisma.$queryRaw<any[]>`
       SELECT COUNT(DISTINCT c.id) as count
       FROM customers c
-      WHERE c."tenantId" = ${tenantId}
-        AND NOT EXISTS (
-          SELECT 1 FROM service_orders so
-          JOIN vehicles v ON so."vehicleId" = v.id
-          WHERE v."customerId" = c.id
-            AND so."arrivedAt" >= ${thirtyDaysAgo}
-        )
+      WHERE NOT EXISTS (
+        SELECT 1 FROM service_orders so
+        JOIN vehicles v ON so."vehicleId" = v.id
+        WHERE v."customerId" = c.id
+          AND so."arrivedAt" >= ${thirtyDaysAgo}
+      )
     `,
   ]);
 

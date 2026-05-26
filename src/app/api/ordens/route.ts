@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
 
 const orderSchema = z.object({
@@ -25,15 +24,18 @@ const orderSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const date = searchParams.get("date");
 
-  const where: any = { tenantId };
+  const where: any = {};
 
   if (status === "active") {
     where.status = { in: ["WAITING", "IN_PROGRESS"] };
@@ -57,7 +59,6 @@ export async function GET(req: NextRequest) {
       items: { include: { service: true } },
       checklist: true,
       opportunities: true,
-      manager: { select: { name: true } },
     },
     orderBy: { arrivedAt: "desc" },
     take: 50,
@@ -67,10 +68,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
-  const managerId = (session.user as any).id as string;
+  let prisma, managerId, managerName;
+  try {
+    ({ prisma, managerId, managerName } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
   const data = orderSchema.parse(body);
@@ -81,9 +84,9 @@ export async function POST(req: NextRequest) {
 
   const order = await prisma.serviceOrder.create({
     data: {
-      tenantId,
       vehicleId: data.vehicleId,
       managerId,
+      managerName,
       washerId: data.washerId,
       notes: data.notes,
       totalAmount,
@@ -96,12 +99,8 @@ export async function POST(req: NextRequest) {
           total: s.unitPrice * s.quantity - s.discount,
         })),
       },
-      checklist: {
-        create: data.checklist,
-      },
-      opportunities: {
-        create: data.opportunities,
-      },
+      checklist: { create: data.checklist },
+      opportunities: { create: data.opportunities },
     },
     include: {
       vehicle: { include: { customer: true } },
@@ -109,11 +108,9 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Registrar no caixa se tiver serviços
   if (totalAmount > 0) {
     await prisma.cashFlow.create({
       data: {
-        tenantId,
         type: "INCOME",
         category: "Lavagem",
         description: `Ordem #${order.id.slice(-6)} - ${order.vehicle.plate}`,

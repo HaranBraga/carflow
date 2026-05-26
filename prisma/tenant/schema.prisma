@@ -1,0 +1,228 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../../src/generated/tenant-client"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TENANT_DATABASE_URL")
+}
+
+// Cada empresa tem seu próprio banco de dados.
+// O ID do gerente (managerId) refere-se ao User no MASTER DB.
+
+model Customer {
+  id          String      @id @default(cuid())
+  name        String
+  phone       String
+  gender      Gender      @default(NOT_INFORMED)
+  isUber      Boolean     @default(false)
+  notes       String?
+  qrCodeToken String      @unique @default(cuid())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  vehicles  Vehicle[]
+  feedbacks Feedback[]
+
+  @@map("customers")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  NOT_INFORMED
+}
+
+model Vehicle {
+  id         String          @id @default(cuid())
+  customerId String
+  plate      String          @unique
+  model      String
+  brand      String?
+  color      String?
+  category   VehicleCategory
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  customer Customer       @relation(fields: [customerId], references: [id])
+  orders   ServiceOrder[]
+
+  @@map("vehicles")
+}
+
+enum VehicleCategory {
+  POPULAR
+  SUV_MEDIO
+  SUV_GRANDE
+  CAMIONETE
+  VAN_CAMINHAO
+  MOTO
+  TAPETE_RESIDENCIAL
+}
+
+model ServiceCategory {
+  id     String  @id @default(cuid())
+  name   String
+  active Boolean @default(true)
+
+  services Service[]
+
+  @@map("service_categories")
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  categoryId  String?
+  name        String
+  description String?
+  basePrice   Decimal @db.Decimal(10, 2)
+  active      Boolean @default(true)
+
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+
+  @@map("services")
+}
+
+model ServiceOrder {
+  id           String      @id @default(cuid())
+  vehicleId    String
+  managerId    String
+  managerName  String?
+  washerId     String?
+  status       OrderStatus @default(WAITING)
+  notes        String?
+  totalAmount  Decimal     @db.Decimal(10, 2) @default(0)
+  whatsappSent Boolean     @default(false)
+  arrivedAt    DateTime    @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  vehicle       Vehicle         @relation(fields: [vehicleId], references: [id])
+  washer        Washer?         @relation(fields: [washerId], references: [id])
+  items         OrderItem[]
+  checklist     ChecklistItem[]
+  opportunities Opportunity[]
+
+  @@map("service_orders")
+}
+
+enum OrderStatus {
+  WAITING
+  IN_PROGRESS
+  FINISHED
+  DELIVERED
+  CANCELLED
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  serviceId String
+  quantity  Int     @default(1)
+  unitPrice Decimal @db.Decimal(10, 2)
+  discount  Decimal @db.Decimal(10, 2) @default(0)
+  total     Decimal @db.Decimal(10, 2)
+  notes     String?
+
+  order   ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  service Service      @relation(fields: [serviceId], references: [id])
+
+  @@map("order_items")
+}
+
+model ChecklistItem {
+  id       String  @id @default(cuid())
+  orderId  String
+  area     String
+  hasIssue Boolean @default(false)
+  notes    String?
+  photoUrl String?
+
+  order ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_items")
+}
+
+model Opportunity {
+  id             String   @id @default(cuid())
+  orderId        String
+  description    String
+  estimatedValue Decimal? @db.Decimal(10, 2)
+  contacted      Boolean  @default(false)
+  notes          String?
+
+  order ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("opportunities")
+}
+
+model Washer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  cpf       String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders   ServiceOrder[]
+  payments WasherPayment[]
+
+  @@map("washers")
+}
+
+model WasherPayment {
+  id         String   @id @default(cuid())
+  washerId   String
+  amount     Decimal  @db.Decimal(10, 2)
+  date       DateTime @default(now())
+  notes      String?
+  cashFlowId String?
+
+  washer   Washer    @relation(fields: [washerId], references: [id])
+  cashFlow CashFlow? @relation(fields: [cashFlowId], references: [id])
+
+  @@map("washer_payments")
+}
+
+model CashFlow {
+  id          String       @id @default(cuid())
+  date        DateTime     @default(now())
+  type        CashFlowType
+  category    String
+  description String
+  amount      Decimal      @db.Decimal(10, 2)
+  orderId     String?
+  closed      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  washerPayments WasherPayment[]
+
+  @@map("cash_flows")
+}
+
+enum CashFlowType {
+  INCOME
+  EXPENSE
+}
+
+model Feedback {
+  id          String    @id @default(cuid())
+  customerId  String
+  token       String    @unique @default(cuid())
+  rating      Int?
+  comment     String?
+  isPublic    Boolean   @default(false)
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@map("feedbacks")
+}

@@ -1,23 +1,30 @@
 import axios from "axios";
 
-const evolutionApi = axios.create({
-  baseURL: process.env.EVOLUTION_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-    apikey: process.env.EVOLUTION_API_KEY,
-  },
-});
+export type EvolutionConfig = {
+  apiUrl?: string;
+  apiKey?: string;
+  instance?: string;
+};
 
-export async function sendWhatsAppMessage(phone: string, message: string): Promise<boolean> {
+export async function sendWhatsAppMessage(
+  phone: string,
+  message: string,
+  config: EvolutionConfig
+): Promise<boolean> {
+  if (!config.apiUrl || !config.apiKey || !config.instance) {
+    console.warn("Evolution API não configurada para esta empresa.");
+    return false;
+  }
+
   try {
-    const instance = process.env.EVOLUTION_INSTANCE;
     const cleanPhone = phone.replace(/\D/g, "");
     const phoneWithCountry = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
 
-    await evolutionApi.post(`/message/sendText/${instance}`, {
-      number: phoneWithCountry,
-      text: message,
-    });
+    await axios.post(
+      `${config.apiUrl}/message/sendText/${config.instance}`,
+      { number: phoneWithCountry, text: message },
+      { headers: { "Content-Type": "application/json", apikey: config.apiKey } }
+    );
 
     return true;
   } catch (error) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
 
 const washerSchema = z.object({
@@ -15,13 +14,16 @@ const paymentSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+export async function GET() {
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const washers = await prisma.washer.findMany({
-    where: { tenantId, active: true },
+    where: { active: true },
     include: {
       _count: { select: { orders: true, payments: true } },
       payments: {
@@ -36,9 +38,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
 
@@ -51,7 +56,6 @@ export async function POST(req: NextRequest) {
 
     await prisma.cashFlow.create({
       data: {
-        tenantId,
         type: "EXPENSE",
         category: "Lavador",
         description: notes || `Pagamento lavador`,
@@ -63,9 +67,7 @@ export async function POST(req: NextRequest) {
   }
 
   const data = washerSchema.parse(body);
-  const washer = await prisma.washer.create({
-    data: { ...data, tenantId },
-  });
+  const washer = await prisma.washer.create({ data });
 
   return NextResponse.json(washer, { status: 201 });
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Building2, Plus, LogOut, Users, Lock, Eye, EyeOff } from "lucide-react";
+import { Building2, Plus, LogOut, Users, Lock, Eye, EyeOff, Database, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,17 @@ type Tenant = {
   slug: string;
   phone: string | null;
   active: boolean;
+  databaseUrl: string;
+  evolutionInstance: string | null;
   createdAt: string;
-  users: { id: string; name: string; username: string | null; email: string; active: boolean }[];
+  users: { id: string; name: string; username: string | null; email: string | null; active: boolean }[];
+};
+
+const emptyForm = {
+  tenantName: "", tenantSlug: "", phone: "", address: "",
+  databaseUrl: "",
+  evolutionApiUrl: "", evolutionApiKey: "", evolutionInstance: "",
+  adminName: "", adminUsername: "", adminPassword: "",
 };
 
 export default function AdminPage() {
@@ -22,12 +31,10 @@ export default function AdminPage() {
   const [authError, setAuthError] = useState("");
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({
-    tenantName: "", tenantSlug: "", phone: "", address: "",
-    adminName: "", adminUsername: "", adminPassword: "",
-  });
+  const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
 
@@ -43,11 +50,8 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ secret }),
     });
-    if (res.ok) {
-      setAuthed(true);
-    } else {
-      setAuthError("Senha incorreta.");
-    }
+    if (res.ok) setAuthed(true);
+    else setAuthError("Senha incorreta.");
   }
 
   async function handleLogout() {
@@ -67,17 +71,19 @@ export default function AdminPage() {
     e.preventDefault();
     setFormError("");
     setFormSuccess("");
+    setSubmitting(true);
     const res = await fetch("/api/admin/tenants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
     const data = await res.json();
+    setSubmitting(false);
     if (!res.ok) {
       setFormError(data.error);
     } else {
       setFormSuccess(`Empresa "${data.name}" criada! Login: ${form.adminUsername}`);
-      setForm({ tenantName: "", tenantSlug: "", phone: "", address: "", adminName: "", adminUsername: "", adminPassword: "" });
+      setForm(emptyForm);
       setShowForm(false);
       loadTenants();
     }
@@ -188,6 +194,50 @@ export default function AdminPage() {
 
                 <div className="col-span-full border-t border-gray-700 pt-4">
                   <p className="text-gray-400 text-sm font-medium mb-3 flex items-center gap-2">
+                    <Database className="w-4 h-4" /> Banco de dados da empresa
+                  </p>
+                  <p className="text-gray-500 text-xs mb-3">
+                    Crie um banco PostgreSQL para esta empresa e cole a URL completa. As tabelas serão criadas automaticamente.
+                  </p>
+                </div>
+                <div className="space-y-2 col-span-full">
+                  <Label className="text-gray-300">DATABASE_URL *</Label>
+                  <Input value={form.databaseUrl}
+                    placeholder="postgresql://user:pass@host:5432/lava_jato_joao"
+                    className="bg-gray-800 border-gray-700 text-white font-mono text-xs"
+                    onChange={(e) => setForm({ ...form, databaseUrl: e.target.value })}
+                    required />
+                </div>
+
+                <div className="col-span-full border-t border-gray-700 pt-4">
+                  <p className="text-gray-400 text-sm font-medium mb-3 flex items-center gap-2">
+                    <MessageCircle className="w-4 h-4" /> WhatsApp (Evolution API) — opcional
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-gray-300">URL da Evolution API</Label>
+                  <Input value={form.evolutionApiUrl}
+                    placeholder="https://evolution.exemplo.com"
+                    className="bg-gray-800 border-gray-700 text-white"
+                    onChange={(e) => setForm({ ...form, evolutionApiUrl: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-gray-300">Instância</Label>
+                  <Input value={form.evolutionInstance}
+                    placeholder="nome-da-instancia"
+                    className="bg-gray-800 border-gray-700 text-white"
+                    onChange={(e) => setForm({ ...form, evolutionInstance: e.target.value })} />
+                </div>
+                <div className="space-y-2 col-span-full">
+                  <Label className="text-gray-300">API Key</Label>
+                  <Input value={form.evolutionApiKey} type="password"
+                    placeholder="••••••••"
+                    className="bg-gray-800 border-gray-700 text-white"
+                    onChange={(e) => setForm({ ...form, evolutionApiKey: e.target.value })} />
+                </div>
+
+                <div className="col-span-full border-t border-gray-700 pt-4">
+                  <p className="text-gray-400 text-sm font-medium mb-3 flex items-center gap-2">
                     <Users className="w-4 h-4" /> Usuário Admin
                   </p>
                 </div>
@@ -205,7 +255,7 @@ export default function AdminPage() {
                     onChange={(e) => setForm({ ...form, adminUsername: e.target.value.toLowerCase().replace(/\s/g, ".") })}
                     required />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 col-span-full">
                   <Label className="text-gray-300">Senha *</Label>
                   <div className="relative">
                     <Input value={form.adminPassword} type={showPassword ? "text" : "password"}
@@ -221,15 +271,17 @@ export default function AdminPage() {
                 </div>
 
                 {formError && (
-                  <div className="col-span-full bg-red-900/40 border border-red-700 text-red-300 px-4 py-3 rounded-lg text-sm">
+                  <div className="col-span-full bg-red-900/40 border border-red-700 text-red-300 px-4 py-3 rounded-lg text-sm whitespace-pre-wrap">
                     {formError}
                   </div>
                 )}
 
                 <div className="col-span-full flex gap-3 justify-end">
                   <Button type="button" variant="ghost" onClick={() => setShowForm(false)}
-                    className="text-gray-400 hover:text-white">Cancelar</Button>
-                  <Button type="submit" className="bg-blue-600 hover:bg-blue-700">Criar Empresa</Button>
+                    className="text-gray-400 hover:text-white" disabled={submitting}>Cancelar</Button>
+                  <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={submitting}>
+                    {submitting ? "Criando..." : "Criar Empresa"}
+                  </Button>
                 </div>
               </form>
             </CardContent>
@@ -247,8 +299,8 @@ export default function AdminPage() {
           <div className="space-y-3">
             {tenants.map((t) => (
               <Card key={t.id} className="bg-gray-900 border-gray-800">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
+                <CardContent className="p-4 flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-white">{t.name}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${t.active ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}>
@@ -258,8 +310,13 @@ export default function AdminPage() {
                     <p className="text-gray-400 text-sm mt-1">slug: <code className="text-blue-400">{t.slug}</code>
                       {t.phone && <span className="ml-3">{t.phone}</span>}
                     </p>
+                    {t.evolutionInstance && (
+                      <p className="text-gray-500 text-xs mt-1 flex items-center gap-1">
+                        <MessageCircle className="w-3 h-3" /> {t.evolutionInstance}
+                      </p>
+                    )}
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <p className="text-gray-400 text-xs mb-1">Admin(s)</p>
                     {t.users.map((u) => (
                       <p key={u.id} className="text-sm text-white">

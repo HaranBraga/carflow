@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { sendWhatsAppMessage, buildCarReadyMessage } from "@/lib/evolution";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma, evolutionApiUrl, evolutionApiKey, evolutionInstance;
+  try {
+    ({ prisma, evolutionApiUrl, evolutionApiKey, evolutionInstance } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { orderId } = await req.json();
 
-  const order = await prisma.serviceOrder.findFirst({
-    where: { id: orderId, tenantId },
+  const order = await prisma.serviceOrder.findUnique({
+    where: { id: orderId },
     include: {
       vehicle: { include: { customer: true } },
       items: { include: { service: true } },
@@ -26,7 +28,11 @@ export async function POST(req: NextRequest) {
   const phone = order.vehicle.customer.phone;
 
   const message = buildCarReadyMessage(customerName, plate, services);
-  const sent = await sendWhatsAppMessage(phone, message);
+  const sent = await sendWhatsAppMessage(phone, message, {
+    apiUrl: evolutionApiUrl,
+    apiKey: evolutionApiKey,
+    instance: evolutionInstance,
+  });
 
   if (sent) {
     await prisma.serviceOrder.update({

@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default function AvaliacaoPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug: string; token: string }> }) {
+  const { tenantSlug, token } = use(params);
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
   const [comment, setComment] = useState("");
@@ -24,7 +24,7 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ token: str
     const res = await fetch("/api/feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, rating, comment }),
+      body: JSON.stringify({ token, tenantSlug, rating, comment }),
     });
 
     setLoading(false);

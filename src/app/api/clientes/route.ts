@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
 
 const customerSchema = z.object({
@@ -12,19 +11,21 @@ const customerSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") || "";
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "20");
 
-  const where = {
-    tenantId,
-    ...(search ? { name: { contains: search, mode: "insensitive" as const } } : {}),
-  };
+  const where = search
+    ? { name: { contains: search, mode: "insensitive" as const } }
+    : {};
 
   const [customers, total] = await Promise.all([
     prisma.customer.findMany({
@@ -44,16 +45,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
   const data = customerSchema.parse(body);
 
-  const customer = await prisma.customer.create({
-    data: { ...data, tenantId },
-  });
+  const customer = await prisma.customer.create({ data });
 
   return NextResponse.json(customer, { status: 201 });
 }

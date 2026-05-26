@@ -1,5 +1,4 @@
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { redirect } from "next/navigation";
 import { formatCurrency, ORDER_STATUS_LABELS, VEHICLE_CATEGORY_LABELS } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +6,12 @@ import { Car, DollarSign, Users, TrendingUp, Clock, CheckCircle } from "lucide-r
 import { format, startOfDay, endOfDay } from "date-fns";
 
 export default async function DashboardPage() {
-  const session = await auth();
-  if (!session) redirect("/login");
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    redirect("/login");
+  }
 
   const today = new Date();
   const start = startOfDay(today);
@@ -23,19 +25,18 @@ export default async function DashboardPage() {
     totalCustomers,
     recentOrders,
   ] = await Promise.all([
-    prisma.serviceOrder.count({ where: { tenantId, arrivedAt: { gte: start, lte: end } } }),
-    prisma.serviceOrder.count({ where: { tenantId, status: { in: ["WAITING", "IN_PROGRESS"] } } }),
+    prisma.serviceOrder.count({ where: { arrivedAt: { gte: start, lte: end } } }),
+    prisma.serviceOrder.count({ where: { status: { in: ["WAITING", "IN_PROGRESS"] } } }),
     prisma.serviceOrder.aggregate({
-      where: { tenantId, arrivedAt: { gte: start, lte: end }, status: { in: ["FINISHED", "DELIVERED"] } },
+      where: { arrivedAt: { gte: start, lte: end }, status: { in: ["FINISHED", "DELIVERED"] } },
       _sum: { totalAmount: true },
     }),
     prisma.cashFlow.aggregate({
-      where: { tenantId, type: "EXPENSE", date: { gte: start, lte: end } },
+      where: { type: "EXPENSE", date: { gte: start, lte: end } },
       _sum: { amount: true },
     }),
-    prisma.customer.count({ where: { tenantId } }),
+    prisma.customer.count(),
     prisma.serviceOrder.findMany({
-      where: { tenantId },
       include: { vehicle: { include: { customer: true } }, washer: true },
       orderBy: { arrivedAt: "desc" },
       take: 6,

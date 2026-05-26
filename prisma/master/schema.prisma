@@ -1,0 +1,54 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../../src/generated/master-client"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("MASTER_DATABASE_URL")
+}
+
+model Tenant {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  cnpj              String?  @unique
+  phone             String?
+  address           String?
+  logoUrl           String?
+  databaseUrl       String
+  evolutionApiUrl   String?
+  evolutionApiKey   String?
+  evolutionInstance String?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  users User[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  username     String   @unique
+  email        String?
+  passwordHash String
+  role         UserRole @default(MANAGER)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  ATTENDANT
+}

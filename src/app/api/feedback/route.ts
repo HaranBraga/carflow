@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, getTenantPrismaByUrl } from "@/lib/prisma-tenant";
+import { masterPrisma } from "@/lib/prisma-master";
 import { z } from "zod";
 import QRCode from "qrcode";
 
@@ -8,19 +8,22 @@ const feedbackSchema = z.object({
   rating: z.number().min(0).max(5),
   comment: z.string().optional(),
   token: z.string(),
+  tenantSlug: z.string(),
 });
 
-// GET: buscar feedbacks do tenant (autenticado)
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma;
+  try {
+    ({ prisma } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const customerId = searchParams.get("customerId");
 
   const feedbacks = await prisma.feedback.findMany({
-    where: { tenantId, ...(customerId ? { customerId } : {}) },
+    where: customerId ? { customerId } : {},
     include: { customer: true },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -29,15 +32,17 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(feedbacks);
 }
 
-// POST: criar token de feedback para cliente (autenticado) ou submeter avaliação (público via token)
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  // Submissão pública via token
-  if (body.token && body.rating !== undefined) {
+  if (body.token && body.rating !== undefined && body.tenantSlug) {
     const data = feedbackSchema.parse(body);
 
-    const feedback = await prisma.feedback.findFirst({
+    const tenant = await masterPrisma.tenant.findUnique({ where: { slug: data.tenantSlug } });
+    if (!tenant) return NextResponse.json({ error: "Empresa não encontrada" }, { status: 404 });
+
+    const tenantPrisma = getTenantPrismaByUrl(tenant.databaseUrl);
+    const feedback = await tenantPrisma.feedback.findFirst({
       where: { token: data.token, submittedAt: null },
     });
 
@@ -45,7 +50,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Token inválido ou já utilizado" }, { status: 400 });
     }
 
-    const updated = await prisma.feedback.update({
+    const updated = await tenantPrisma.feedback.update({
       where: { id: feedback.id },
       data: { rating: data.rating, comment: data.comment, submittedAt: new Date() },
     });
@@ -53,22 +58,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(updated);
   }
 
-  // Criação de feedback (autenticado)
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = (session.user as any).tenantId;
+  let prisma, tenantId;
+  try {
+    ({ prisma, tenantId } = await getTenantPrisma());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { customerId } = body;
 
-  const customer = await prisma.customer.findFirst({ where: { id: customerId, tenantId } });
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
 
   const feedback = await prisma.feedback.create({
-    data: { tenantId, customerId },
+    data: { customerId },
   });
 
+  const tenant = await masterPrisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const feedbackUrl = `${appUrl}/avaliacao/${feedback.token}`;
+  const feedbackUrl = `${appUrl}/avaliacao/${tenant?.slug}/${feedback.token}`;
   const qrCodeDataUrl = await QRCode.toDataURL(feedbackUrl, { width: 300, margin: 2 });
 
   return NextResponse.json({ feedback, feedbackUrl, qrCodeDataUrl }, { status: 201 });

@@ -11,16 +11,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/entrada", label: "Entrada de Veículo", icon: Car },
-  { href: "/dashboard/lavagem", label: "Painel de Lavagem", icon: Wrench },
-  { href: "/dashboard/caixa", label: "Caixa do Dia", icon: DollarSign },
-  { href: "/dashboard/lavadores", label: "Lavadores", icon: UserCheck },
-  { href: "/dashboard/clientes", label: "CRM / Clientes", icon: Users },
-  { href: "/dashboard/servicos", label: "Serviços", icon: BarChart2 },
-  { href: "/dashboard/feedback", label: "Feedback", icon: Star },
-  { href: "/dashboard/previsao", label: "Previsão do Tempo", icon: CloudSun },
-  { href: "/dashboard/relatorios", label: "Relatórios", icon: BarChart2 },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/entrada", label: "Entrada de Veículo", icon: Car },
+  { href: "/lavagem", label: "Painel de Lavagem", icon: Wrench },
+  { href: "/caixa", label: "Caixa do Dia", icon: DollarSign },
+  { href: "/lavadores", label: "Lavadores", icon: UserCheck },
+  { href: "/clientes", label: "CRM / Clientes", icon: Users },
+  { href: "/servicos", label: "Serviços", icon: BarChart2 },
+  { href: "/feedback", label: "Feedback", icon: Star },
+  { href: "/previsao", label: "Previsão do Tempo", icon: CloudSun },
 ];
 
 interface SidebarProps {
