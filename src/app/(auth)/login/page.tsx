@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Car, Lock, Mail, Building2 } from "lucide-react";
+import { Car, Lock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ email: "", password: "", tenantSlug: "default" });
+  const [form, setForm] = useState({ username: "", password: "" });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,18 +20,17 @@ export default function LoginPage() {
     setError("");
 
     const result = await signIn("credentials", {
-      email: form.email,
+      username: form.username,
       password: form.password,
-      tenantSlug: form.tenantSlug,
       redirect: false,
     });
 
     setLoading(false);
 
     if (result?.error) {
-      setError("Email, senha ou empresa incorretos.");
+      setError("Usuário ou senha incorretos.");
     } else {
-      router.push("/dashboard");
+      router.push("/");
     }
   }
 
@@ -49,36 +48,20 @@ export default function LoginPage() {
         <Card>
           <CardHeader>
             <CardTitle>Acesso ao Sistema</CardTitle>
-            <CardDescription>Entre com suas credenciais de gerente</CardDescription>
+            <CardDescription>Entre com seu usuário e senha</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="tenantSlug">Código da Empresa</Label>
+                <Label htmlFor="username">Usuário</Label>
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
-                    id="tenantSlug"
-                    placeholder="meu-lava-jato"
+                    id="username"
+                    placeholder="seu.usuario"
                     className="pl-9"
-                    value={form.tenantSlug}
-                    onChange={(e) => setForm({ ...form, tenantSlug: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="gerente@lavajato.com"
-                    className="pl-9"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    value={form.username}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
                     required
                   />
                 </div>

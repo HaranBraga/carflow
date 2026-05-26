@@ -26,6 +26,7 @@ async function main() {
     create: {
       tenantId: tenant.id,
       name: "Administrador",
+      username: "admin",
       email: "admin@carflow.com",
       passwordHash: hash,
       role: "ADMIN",
