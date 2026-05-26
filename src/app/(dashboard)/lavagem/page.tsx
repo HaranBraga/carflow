@@ -44,7 +44,11 @@ export default function LavagemPage() {
     const data = await res.json().catch(() => ({}));
     setSending(null);
     if (!res.ok || !data.sent) {
-      alert(`Falha ao enviar WhatsApp${data.number ? ` para ${data.number}` : ""}.\n\n${data.error || "Verifique config da Evolution API em /admin."}`);
+      const parts = ["Falha ao enviar WhatsApp."];
+      if (data.number) parts.push(`Número: ${data.number}`);
+      if (data.url) parts.push(`URL: ${data.url}`);
+      if (data.error) parts.push(`Erro: ${data.error}`);
+      alert(parts.join("\n\n"));
     }
     fetchOrders();
   }

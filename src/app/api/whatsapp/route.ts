@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     sent: result.sent,
     number: result.number,
+    url: result.url,
+    status: result.status,
     error: result.error,
     message,
   }, { status: result.sent ? 200 : 502 });
