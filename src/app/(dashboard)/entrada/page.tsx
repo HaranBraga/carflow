@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Camera, Car, User, CheckCircle, Lightbulb, X } from "lucide-react";
+import { Search, Plus, Car, User, CheckCircle, Lightbulb, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,9 +47,11 @@ interface ChecklistEntry {
 
 export default function EntradaPage() {
   const router = useRouter();
+  const submittingRef = useRef(false);
   const [step, setStep] = useState<Step>("placa");
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [error, setError] = useState("");
   const [plateInput, setPlateInput] = useState("");
   const [existingVehicle, setExistingVehicle] = useState<any>(null);
 
@@ -60,7 +62,7 @@ export default function EntradaPage() {
   const [checklist, setChecklist] = useState<ChecklistEntry[]>(
     CHECKLIST_AREAS.map((area) => ({ area, hasIssue: false, notes: "" }))
   );
-  const [opportunities, setOpportunities] = useState<{ description: string; estimatedValue: string }[]>([]);
+  const [opportunities, setOpportunities] = useState<string[]>([]);
   const [washerId, setWasherId] = useState("");
   const [washers, setWashers] = useState<any[]>([]);
   const [orderNotes, setOrderNotes] = useState("");
@@ -107,14 +109,27 @@ export default function EntradaPage() {
     setServices(services.filter((s) => s.serviceId !== serviceId));
   }
 
-  function addOpportunity() {
-    setOpportunities([...opportunities, { description: "", estimatedValue: "" }]);
+  function addOpportunity(serviceId: string) {
+    if (!serviceId || opportunities.includes(serviceId)) return;
+    setOpportunities([...opportunities, serviceId]);
+  }
+
+  function removeOpportunity(serviceId: string) {
+    setOpportunities(opportunities.filter((s) => s !== serviceId));
   }
 
   const total = services.reduce((sum, s) => sum + s.unitPrice * s.quantity - s.discount, 0);
 
+  const opportunityServices = opportunities
+    .map((sid) => availableServices.find((s) => s.id === sid))
+    .filter(Boolean);
+
   async function submitOrder() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
+    setError("");
+
     try {
       let customerId = customer.id;
       let vehicleId = existingVehicle?.id;
@@ -123,10 +138,20 @@ export default function EntradaPage() {
         const cRes = await fetch("/api/clientes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: customer.name, phone: customer.phone, gender: customer.gender, isUber: customer.isUber }),
+          body: JSON.stringify({
+            name: customer.name,
+            phone: customer.phone,
+            gender: customer.gender,
+            isUber: customer.isUber,
+          }),
         });
+        if (!cRes.ok) {
+          const e = await cRes.json().catch(() => ({}));
+          throw new Error(e.error || "Falha ao cadastrar cliente");
+        }
         const cData = await cRes.json();
         customerId = cData.id;
+        setCustomer((c) => ({ ...c, id: customerId }));
       }
 
       if (!vehicleId) {
@@ -136,24 +161,54 @@ export default function EntradaPage() {
           body: JSON.stringify({ ...vehicle, customerId }),
         });
         const vData = await vRes.json();
-        vehicleId = vData.id;
+        if (!vRes.ok) {
+          if (vRes.status === 409 && vData.vehicle?.id) {
+            vehicleId = vData.vehicle.id;
+            setExistingVehicle(vData.vehicle);
+          } else {
+            throw new Error(vData.error || "Falha ao cadastrar veículo");
+          }
+        } else {
+          vehicleId = vData.id;
+          setExistingVehicle(vData);
+        }
       }
 
-      await fetch("/api/ordens", {
+      const opportunitiesPayload = opportunities
+        .map((sid) => {
+          const svc = availableServices.find((s) => s.id === sid);
+          if (!svc) return null;
+          return { description: svc.name, estimatedValue: Number(svc.basePrice) };
+        })
+        .filter(Boolean);
+
+      const oRes = await fetch("/api/ordens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vehicleId,
           washerId: washerId || undefined,
           notes: orderNotes,
-          services: services.map((s) => ({ serviceId: s.serviceId, quantity: s.quantity, unitPrice: s.unitPrice, discount: s.discount })),
+          services: services.map((s) => ({
+            serviceId: s.serviceId,
+            quantity: s.quantity,
+            unitPrice: s.unitPrice,
+            discount: s.discount,
+          })),
           checklist: checklist.filter((c) => c.hasIssue),
-          opportunities: opportunities.filter((o) => o.description),
+          opportunities: opportunitiesPayload,
         }),
       });
 
+      if (!oRes.ok) {
+        const e = await oRes.json().catch(() => ({}));
+        throw new Error(e.error || `Falha ao criar ordem (${oRes.status})`);
+      }
+
       router.push("/lavagem");
-    } finally {
+    } catch (e: any) {
+      setError(e?.message || "Erro ao registrar entrada");
+      submittingRef.current = false;
       setLoading(false);
     }
   }
@@ -402,31 +457,42 @@ export default function EntradaPage() {
               ))}
             </div>
 
-            <div>
+            <div className="border-t pt-4">
               <div className="flex items-center justify-between mb-2">
                 <Label className="flex items-center gap-2"><Lightbulb className="w-4 h-4 text-yellow-500" />Oportunidades de Serviço</Label>
-                <Button size="sm" variant="outline" onClick={addOpportunity}><Plus className="w-3 h-3 mr-1" />Adicionar</Button>
               </div>
-              {opportunities.map((op, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Ex: Polimento lateral esquerda..."
-                    value={op.description}
-                    onChange={(e) => { const u = [...opportunities]; u[i] = { ...op, description: e.target.value }; setOpportunities(u); }}
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder="Valor"
-                    type="number"
-                    value={op.estimatedValue}
-                    onChange={(e) => { const u = [...opportunities]; u[i] = { ...op, estimatedValue: e.target.value }; setOpportunities(u); }}
-                    className="w-24"
-                  />
-                  <Button size="icon" variant="ghost" onClick={() => setOpportunities(opportunities.filter((_, j) => j !== i))}>
-                    <X className="w-4 h-4" />
-                  </Button>
+              <p className="text-xs text-muted-foreground mb-2">Serviços que o cliente pode contratar no futuro</p>
+
+              <Select value="" onValueChange={addOpportunity}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um serviço para adicionar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableServices
+                    .filter((svc) => !opportunities.includes(svc.id))
+                    .map((svc) => (
+                      <SelectItem key={svc.id} value={svc.id}>
+                        {svc.name} — {formatCurrency(Number(svc.basePrice))}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+
+              {opportunityServices.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {opportunityServices.map((svc: any) => (
+                    <div key={svc.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium">{svc.name}</p>
+                        <p className="text-xs text-muted-foreground">{formatCurrency(Number(svc.basePrice))}</p>
+                      </div>
+                      <button onClick={() => removeOpportunity(svc.id)} className="text-destructive hover:opacity-70">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
 
             <div className="flex gap-2">
@@ -482,8 +548,23 @@ export default function EntradaPage() {
               </div>
             )}
 
+            {opportunityServices.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs font-medium text-yellow-700 mb-1">Oportunidades futuras:</p>
+                <ul className="text-xs text-yellow-700 space-y-0.5">
+                  {opportunityServices.map((svc: any) => <li key={svc.id}>• {svc.name} ({formatCurrency(Number(svc.basePrice))})</li>)}
+                </ul>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("checklist")} className="flex-1">Voltar</Button>
+              <Button variant="outline" onClick={() => setStep("checklist")} className="flex-1" disabled={loading}>Voltar</Button>
               <Button onClick={submitOrder} disabled={loading} className="flex-1" variant="success">
                 {loading ? "Registrando..." : "Confirmar Entrada"}
               </Button>

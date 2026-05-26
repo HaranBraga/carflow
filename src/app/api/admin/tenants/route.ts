@@ -78,14 +78,6 @@ export async function POST(req: NextRequest) {
     const defaultServices = [
       { name: "Lavagem Simples", basePrice: 30, description: "Lavagem externa completa" },
       { name: "Lavagem Completa", basePrice: 50, description: "Lavagem externa + aspiração interna" },
-      { name: "Lavagem + Cera", basePrice: 80, description: "Lavagem completa com aplicação de cera" },
-      { name: "Polimento", basePrice: 150, description: "Polimento com máquina" },
-      { name: "Higienização Interna", basePrice: 120, description: "Higienização completa do interior" },
-      { name: "Lavagem SUV/Camionete", basePrice: 70, description: "Lavagem completa para SUVs e camionetes" },
-      { name: "Lavagem Moto", basePrice: 25, description: "Lavagem completa para motos" },
-      { name: "Tapete Residencial", basePrice: 40, description: "Lavagem de tapete residencial" },
-      { name: "Cristalização", basePrice: 200, description: "Cristalização de vidros" },
-      { name: "Lavagem + Motor", basePrice: 100, description: "Lavagem completa + limpeza do motor" },
     ];
     for (const svc of defaultServices) {
       await tenantClient.service.upsert({
