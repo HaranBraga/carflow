@@ -13,7 +13,6 @@ COPY . .
 RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
-RUN node_modules/.bin/esbuild prisma/seed.ts --bundle --platform=node --target=node18 --outfile=prisma/seed.js --format=cjs --external:@prisma/client
 
 FROM base AS runner
 WORKDIR /app
