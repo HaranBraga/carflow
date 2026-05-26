@@ -6,30 +6,43 @@ export type EvolutionConfig = {
   instance?: string;
 };
 
+export type SendResult = {
+  sent: boolean;
+  number: string;
+  error?: string;
+};
+
+function normalizeBrazilianPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length <= 11) return `55${digits}`;
+  return digits;
+}
+
 export async function sendWhatsAppMessage(
   phone: string,
   message: string,
   config: EvolutionConfig
-): Promise<boolean> {
+): Promise<SendResult> {
+  const number = normalizeBrazilianPhone(phone);
+
   if (!config.apiUrl || !config.apiKey || !config.instance) {
-    console.warn("Evolution API não configurada para esta empresa.");
-    return false;
+    return { sent: false, number, error: "Evolution API não configurada para essa empresa." };
   }
 
   try {
-    const cleanPhone = phone.replace(/\D/g, "");
-    const phoneWithCountry = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-
     await axios.post(
       `${config.apiUrl}/message/sendText/${config.instance}`,
-      { number: phoneWithCountry, text: message },
+      { number, text: message },
       { headers: { "Content-Type": "application/json", apikey: config.apiKey } }
     );
-
-    return true;
-  } catch (error) {
-    console.error("Erro ao enviar WhatsApp:", error);
-    return false;
+    return { sent: true, number };
+  } catch (error: any) {
+    const detail =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      "Erro desconhecido";
+    return { sent: false, number, error: String(detail) };
   }
 }
 

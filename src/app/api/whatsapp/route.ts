@@ -28,18 +28,23 @@ export async function POST(req: NextRequest) {
   const phone = order.vehicle.customer.phone;
 
   const message = buildCarReadyMessage(customerName, plate, services);
-  const sent = await sendWhatsAppMessage(phone, message, {
+  const result = await sendWhatsAppMessage(phone, message, {
     apiUrl: evolutionApiUrl,
     apiKey: evolutionApiKey,
     instance: evolutionInstance,
   });
 
-  if (sent) {
+  if (result.sent) {
     await prisma.serviceOrder.update({
       where: { id: orderId },
       data: { whatsappSent: true },
     });
   }
 
-  return NextResponse.json({ sent, message });
+  return NextResponse.json({
+    sent: result.sent,
+    number: result.number,
+    error: result.error,
+    message,
+  }, { status: result.sent ? 200 : 502 });
 }

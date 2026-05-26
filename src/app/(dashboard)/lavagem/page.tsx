@@ -36,12 +36,16 @@ export default function LavagemPage() {
 
   async function sendWhatsApp(orderId: string) {
     setSending(orderId);
-    await fetch("/api/whatsapp", {
+    const res = await fetch("/api/whatsapp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderId }),
     });
+    const data = await res.json().catch(() => ({}));
     setSending(null);
+    if (!res.ok || !data.sent) {
+      alert(`Falha ao enviar WhatsApp${data.number ? ` para ${data.number}` : ""}.\n\n${data.error || "Verifique config da Evolution API em /admin."}`);
+    }
     fetchOrders();
   }
 
