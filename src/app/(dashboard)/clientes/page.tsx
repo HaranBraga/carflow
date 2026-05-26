@@ -12,7 +12,6 @@ export default function ClientesPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("clientes");
 
   async function fetchCustomers(q = "") {
@@ -23,14 +22,8 @@ export default function ClientesPage() {
     setLoading(false);
   }
 
-  async function fetchStats() {
-    const res = await fetch("/api/crm/stats");
-    if (res.ok) setStats(await res.json());
-  }
-
   useEffect(() => {
     fetchCustomers();
-    fetchStats();
   }, []);
 
   useEffect(() => {
