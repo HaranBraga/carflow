@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Building2, Plus, LogOut, Users, Lock, Eye, EyeOff, Database, MessageCircle } from "lucide-react";
+import { Building2, Plus, LogOut, Users, Lock, Eye, EyeOff, Database, MessageCircle, Pencil, Trash2, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,8 +11,11 @@ type Tenant = {
   name: string;
   slug: string;
   phone: string | null;
+  address: string | null;
   active: boolean;
   databaseUrl: string;
+  evolutionApiUrl: string | null;
+  evolutionApiKey: string | null;
   evolutionInstance: string | null;
   createdAt: string;
   users: { id: string; name: string; username: string | null; email: string | null; active: boolean }[];
@@ -25,6 +28,8 @@ const emptyForm = {
   adminName: "", adminUsername: "", adminPassword: "",
 };
 
+type Mode = "list" | "create" | "edit";
+
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [secret, setSecret] = useState("");
@@ -32,7 +37,8 @@ export default function AdminPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const [mode, setMode] = useState<Mode>("list");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
@@ -67,25 +73,102 @@ export default function AdminPage() {
     setLoading(false);
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  function startCreate() {
+    setForm(emptyForm);
+    setFormError("");
+    setFormSuccess("");
+    setEditingId(null);
+    setMode("create");
+  }
+
+  function startEdit(t: Tenant) {
+    setForm({
+      tenantName: t.name,
+      tenantSlug: t.slug,
+      phone: t.phone ?? "",
+      address: t.address ?? "",
+      databaseUrl: t.databaseUrl,
+      evolutionApiUrl: t.evolutionApiUrl ?? "",
+      evolutionApiKey: "",
+      evolutionInstance: t.evolutionInstance ?? "",
+      adminName: "",
+      adminUsername: "",
+      adminPassword: "",
+    });
+    setFormError("");
+    setFormSuccess("");
+    setEditingId(t.id);
+    setMode("edit");
+  }
+
+  function cancelForm() {
+    setMode("list");
+    setEditingId(null);
+    setForm(emptyForm);
+    setFormError("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
     setFormSuccess("");
     setSubmitting(true);
-    const res = await fetch("/api/admin/tenants", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+
+    let res: Response;
+    if (mode === "create") {
+      res = await fetch("/api/admin/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+    } else {
+      res = await fetch(`/api/admin/tenants/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.tenantName,
+          slug: form.tenantSlug,
+          phone: form.phone,
+          address: form.address,
+          databaseUrl: form.databaseUrl,
+          evolutionApiUrl: form.evolutionApiUrl,
+          evolutionApiKey: form.evolutionApiKey,
+          evolutionInstance: form.evolutionInstance,
+        }),
+      });
+    }
+
     const data = await res.json();
     setSubmitting(false);
+
     if (!res.ok) {
-      setFormError(data.error);
-    } else {
-      setFormSuccess(`Empresa "${data.name}" criada! Login: ${form.adminUsername}`);
-      setForm(emptyForm);
-      setShowForm(false);
+      setFormError(data.error || "Erro");
+      return;
+    }
+
+    setFormSuccess(mode === "create" ? `Empresa "${data.name}" criada!` : `Empresa "${data.name}" atualizada!`);
+    cancelForm();
+    loadTenants();
+  }
+
+  async function toggleActive(t: Tenant) {
+    await fetch(`/api/admin/tenants/${t.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !t.active }),
+    });
+    loadTenants();
+  }
+
+  async function deleteTenant(t: Tenant) {
+    if (!confirm(`Excluir empresa "${t.name}"? O banco de dados dela NÃO será removido — apenas o registro no master.`)) return;
+    const res = await fetch(`/api/admin/tenants/${t.id}`, { method: "DELETE" });
+    if (res.ok) {
+      setFormSuccess(`Empresa "${t.name}" excluída.`);
       loadTenants();
+    } else {
+      const data = await res.json();
+      setFormError(data.error || "Erro ao excluir");
     }
   }
 
@@ -126,6 +209,9 @@ export default function AdminPage() {
     );
   }
 
+  const showForm = mode === "create" || mode === "edit";
+  const isEdit = mode === "edit";
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
@@ -146,10 +232,11 @@ export default function AdminPage() {
             <h2 className="text-xl font-bold">Empresas cadastradas</h2>
             <p className="text-gray-400 text-sm mt-1">{tenants.length} empresa(s)</p>
           </div>
-          <Button onClick={() => { setShowForm(!showForm); setFormError(""); setFormSuccess(""); }}
-            className="bg-blue-600 hover:bg-blue-700 gap-2">
-            <Plus className="w-4 h-4" /> Nova Empresa
-          </Button>
+          {!showForm && (
+            <Button onClick={startCreate} className="bg-blue-600 hover:bg-blue-700 gap-2">
+              <Plus className="w-4 h-4" /> Nova Empresa
+            </Button>
+          )}
         </div>
 
         {formSuccess && (
@@ -161,15 +248,17 @@ export default function AdminPage() {
         {showForm && (
           <Card className="bg-gray-900 border-gray-800">
             <CardHeader>
-              <CardTitle className="text-white text-base">Nova Empresa</CardTitle>
+              <CardTitle className="text-white text-base">
+                {isEdit ? `Editar empresa` : "Nova Empresa"}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-gray-300">Nome da empresa *</Label>
                   <Input value={form.tenantName} placeholder="Lava-Jato do João"
                     className="bg-gray-800 border-gray-700 text-white"
-                    onChange={(e) => setForm({ ...form, tenantName: e.target.value, tenantSlug: slugify(e.target.value) })}
+                    onChange={(e) => setForm({ ...form, tenantName: e.target.value, tenantSlug: isEdit ? form.tenantSlug : slugify(e.target.value) })}
                     required />
                 </div>
                 <div className="space-y-2">
@@ -196,9 +285,15 @@ export default function AdminPage() {
                   <p className="text-gray-400 text-sm font-medium mb-3 flex items-center gap-2">
                     <Database className="w-4 h-4" /> Banco de dados da empresa
                   </p>
-                  <p className="text-gray-500 text-xs mb-3">
-                    Crie um banco PostgreSQL para esta empresa e cole a URL completa. As tabelas serão criadas automaticamente.
-                  </p>
+                  {isEdit ? (
+                    <p className="text-yellow-500 text-xs mb-3">
+                      ⚠ Cuidado ao trocar a URL: as tabelas só serão criadas na PRIMEIRA criação. Alterar aqui só re-aponta para outro banco existente.
+                    </p>
+                  ) : (
+                    <p className="text-gray-500 text-xs mb-3">
+                      Crie um banco PostgreSQL para esta empresa e cole a URL completa. As tabelas serão criadas automaticamente.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2 col-span-full">
                   <Label className="text-gray-300">DATABASE_URL *</Label>
@@ -229,46 +324,50 @@ export default function AdminPage() {
                     onChange={(e) => setForm({ ...form, evolutionInstance: e.target.value })} />
                 </div>
                 <div className="space-y-2 col-span-full">
-                  <Label className="text-gray-300">API Key</Label>
+                  <Label className="text-gray-300">API Key {isEdit && <span className="text-gray-500 text-xs">(deixe vazio para manter a atual)</span>}</Label>
                   <Input value={form.evolutionApiKey} type="password"
-                    placeholder="••••••••"
+                    placeholder={isEdit ? "••••• (mantém a anterior)" : "API Key"}
                     className="bg-gray-800 border-gray-700 text-white"
                     onChange={(e) => setForm({ ...form, evolutionApiKey: e.target.value })} />
                 </div>
 
-                <div className="col-span-full border-t border-gray-700 pt-4">
-                  <p className="text-gray-400 text-sm font-medium mb-3 flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Usuário Admin
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Nome completo *</Label>
-                  <Input value={form.adminName} placeholder="João Silva"
-                    className="bg-gray-800 border-gray-700 text-white"
-                    onChange={(e) => setForm({ ...form, adminName: e.target.value })}
-                    required />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Usuário de login *</Label>
-                  <Input value={form.adminUsername} placeholder="joao.lavajato"
-                    className="bg-gray-800 border-gray-700 text-white"
-                    onChange={(e) => setForm({ ...form, adminUsername: e.target.value.toLowerCase().replace(/\s/g, ".") })}
-                    required />
-                </div>
-                <div className="space-y-2 col-span-full">
-                  <Label className="text-gray-300">Senha *</Label>
-                  <div className="relative">
-                    <Input value={form.adminPassword} type={showPassword ? "text" : "password"}
-                      placeholder="mínimo 6 caracteres"
-                      className="bg-gray-800 border-gray-700 text-white pr-10"
-                      onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
-                      minLength={6} required />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-3 text-gray-400 hover:text-white">
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
+                {!isEdit && (
+                  <>
+                    <div className="col-span-full border-t border-gray-700 pt-4">
+                      <p className="text-gray-400 text-sm font-medium mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4" /> Usuário Admin
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-gray-300">Nome completo *</Label>
+                      <Input value={form.adminName} placeholder="João Silva"
+                        className="bg-gray-800 border-gray-700 text-white"
+                        onChange={(e) => setForm({ ...form, adminName: e.target.value })}
+                        required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-gray-300">Usuário de login *</Label>
+                      <Input value={form.adminUsername} placeholder="joao.lavajato"
+                        className="bg-gray-800 border-gray-700 text-white"
+                        onChange={(e) => setForm({ ...form, adminUsername: e.target.value.toLowerCase().replace(/\s/g, ".") })}
+                        required />
+                    </div>
+                    <div className="space-y-2 col-span-full">
+                      <Label className="text-gray-300">Senha *</Label>
+                      <div className="relative">
+                        <Input value={form.adminPassword} type={showPassword ? "text" : "password"}
+                          placeholder="mínimo 6 caracteres"
+                          className="bg-gray-800 border-gray-700 text-white pr-10"
+                          onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
+                          minLength={6} required />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-3 text-gray-400 hover:text-white">
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {formError && (
                   <div className="col-span-full bg-red-900/40 border border-red-700 text-red-300 px-4 py-3 rounded-lg text-sm whitespace-pre-wrap">
@@ -277,10 +376,10 @@ export default function AdminPage() {
                 )}
 
                 <div className="col-span-full flex gap-3 justify-end">
-                  <Button type="button" variant="ghost" onClick={() => setShowForm(false)}
+                  <Button type="button" variant="ghost" onClick={cancelForm}
                     className="text-gray-400 hover:text-white" disabled={submitting}>Cancelar</Button>
                   <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={submitting}>
-                    {submitting ? "Criando..." : "Criar Empresa"}
+                    {submitting ? (isEdit ? "Salvando..." : "Criando...") : (isEdit ? "Salvar alterações" : "Criar Empresa")}
                   </Button>
                 </div>
               </form>
@@ -299,30 +398,43 @@ export default function AdminPage() {
           <div className="space-y-3">
             {tenants.map((t) => (
               <Card key={t.id} className="bg-gray-900 border-gray-800">
-                <CardContent className="p-4 flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white">{t.name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${t.active ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}>
-                        {t.active ? "Ativa" : "Inativa"}
-                      </span>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-white">{t.name}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${t.active ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}>
+                          {t.active ? "Ativa" : "Inativa"}
+                        </span>
+                      </div>
+                      <p className="text-gray-400 text-sm mt-1">
+                        slug: <code className="text-blue-400">{t.slug}</code>
+                        {t.phone && <span className="ml-3">{t.phone}</span>}
+                      </p>
+                      {t.evolutionInstance && (
+                        <p className="text-gray-500 text-xs mt-1 flex items-center gap-1">
+                          <MessageCircle className="w-3 h-3" /> {t.evolutionInstance}
+                        </p>
+                      )}
+                      <p className="text-gray-500 text-xs mt-1">
+                        Admin(s): {t.users.map((u) => u.username ?? u.email).join(", ")}
+                      </p>
                     </div>
-                    <p className="text-gray-400 text-sm mt-1">slug: <code className="text-blue-400">{t.slug}</code>
-                      {t.phone && <span className="ml-3">{t.phone}</span>}
-                    </p>
-                    {t.evolutionInstance && (
-                      <p className="text-gray-500 text-xs mt-1 flex items-center gap-1">
-                        <MessageCircle className="w-3 h-3" /> {t.evolutionInstance}
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-gray-400 text-xs mb-1">Admin(s)</p>
-                    {t.users.map((u) => (
-                      <p key={u.id} className="text-sm text-white">
-                        <code className="text-blue-400">{u.username ?? u.email}</code>
-                      </p>
-                    ))}
+                    <div className="flex gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" onClick={() => startEdit(t)}
+                        className="text-gray-400 hover:text-white" title="Editar">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => toggleActive(t)}
+                        className={t.active ? "text-yellow-400 hover:text-yellow-300" : "text-green-400 hover:text-green-300"}
+                        title={t.active ? "Desativar" : "Ativar"}>
+                        <Power className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteTenant(t)}
+                        className="text-red-400 hover:text-red-300" title="Excluir">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
