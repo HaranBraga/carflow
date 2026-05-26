@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const tenantId = (session.user as any).tenantId;
+  const { id } = await params;
 
   const body = await req.json();
   const { status, washerId, whatsappSent } = body;
 
-  const order = await prisma.serviceOrder.findFirst({ where: { id: params.id, tenantId } });
+  const order = await prisma.serviceOrder.findFirst({ where: { id, tenantId } });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   const updateData: any = {};
@@ -23,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (whatsappSent !== undefined) updateData.whatsappSent = whatsappSent;
 
   const updated = await prisma.serviceOrder.update({
-    where: { id: params.id },
+    where: { id },
     data: updateData,
     include: {
       vehicle: { include: { customer: true } },
@@ -35,13 +36,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(updated);
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const tenantId = (session.user as any).tenantId;
+  const { id } = await params;
 
   const order = await prisma.serviceOrder.findFirst({
-    where: { id: params.id, tenantId },
+    where: { id, tenantId },
     include: {
       vehicle: { include: { customer: true } },
       items: { include: { service: true } },

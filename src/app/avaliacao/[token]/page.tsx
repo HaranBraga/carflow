@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
-import { Star, Send, CheckCircle, Instagram } from "lucide-react";
+import { use, useState } from "react";
+import { Star, Send, CheckCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default function AvaliacaoPage({ params }: { params: { token: string } }) {
+export default function AvaliacaoPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params);
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
   const [comment, setComment] = useState("");
@@ -23,7 +24,7 @@ export default function AvaliacaoPage({ params }: { params: { token: string } })
     const res = await fetch("/api/feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: params.token, rating, comment }),
+      body: JSON.stringify({ token, rating, comment }),
     });
 
     setLoading(false);
@@ -53,7 +54,7 @@ export default function AvaliacaoPage({ params }: { params: { token: string } })
               <p className="text-white font-medium text-sm mb-3">Nos siga no Instagram para não perder o resultado do sorteio!</p>
               <a href={instagramUrl} target="_blank" rel="noopener noreferrer">
                 <Button className="bg-white text-purple-600 hover:bg-white/90 w-full gap-2">
-                  <Instagram className="w-4 h-4" />
+                  <ExternalLink className="w-4 h-4" />
                   Seguir no Instagram
                 </Button>
               </a>
