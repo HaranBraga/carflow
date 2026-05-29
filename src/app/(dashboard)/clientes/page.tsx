@@ -1,18 +1,37 @@
 "use client";
 import { useEffect, useState } from "react";
-import { format, subDays } from "date-fns";
-import { Users, Search, Star, TrendingUp, Car } from "lucide-react";
+import { Users, Search, Star, TrendingUp, Car, Pencil, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatPhone, GENDER_LABELS, VEHICLE_CATEGORY_LABELS } from "@/lib/utils";
 
+type Customer = {
+  id: string;
+  name: string;
+  phone: string;
+  gender: string;
+  isUber: boolean;
+  notes: string | null;
+  createdAt: string;
+  vehicles: any[];
+  _count?: { feedbacks: number };
+};
+
 export default function ClientesPage() {
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("clientes");
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", phone: "", gender: "", isUber: false, notes: "" });
+  const [editError, setEditError] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   async function fetchCustomers(q = "") {
     setLoading(true);
@@ -22,14 +41,37 @@ export default function ClientesPage() {
     setLoading(false);
   }
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
+  useEffect(() => { fetchCustomers(); }, []);
   useEffect(() => {
     const t = setTimeout(() => fetchCustomers(search), 400);
     return () => clearTimeout(t);
   }, [search]);
+
+  function openEdit(c: Customer) {
+    setEditing(c);
+    setEditForm({ name: c.name, phone: c.phone, gender: c.gender, isUber: c.isUber, notes: c.notes ?? "" });
+    setEditError("");
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setEditSaving(true);
+    setEditError("");
+    const res = await fetch(`/api/clientes/${editing.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm),
+    });
+    const data = await res.json().catch(() => ({}));
+    setEditSaving(false);
+    if (!res.ok) {
+      setEditError(data.error || "Erro ao salvar");
+      return;
+    }
+    setEditing(null);
+    fetchCustomers(search);
+  }
 
   return (
     <div className="space-y-6">
@@ -58,26 +100,28 @@ export default function ClientesPage() {
               {customers.map((c) => (
                 <Card key={c.id}>
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-bold">{c.name}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold">{c.name}</p>
+                          {c.isUber && <Badge variant="info" className="text-xs">Uber</Badge>}
+                        </div>
                         <p className="text-sm text-muted-foreground">{formatPhone(c.phone)}</p>
-                        <p className="text-xs text-muted-foreground">{GENDER_LABELS[c.gender]} {c.isUber ? "· Uber" : ""}</p>
+                        <p className="text-xs text-muted-foreground">{GENDER_LABELS[c.gender]}</p>
+                        {c.vehicles?.length > 0 && (
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            {c.vehicles.map((v: any) => (
+                              <Badge key={v.id} variant="outline" className="font-mono text-xs">
+                                {v.plate} · {VEHICLE_CATEGORY_LABELS[v.category]}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-right text-xs text-muted-foreground">
-                        <p>{c.vehicles?.length || 0} veículo(s)</p>
-                        <p className="mt-1">Cliente desde {format(new Date(c.createdAt), "MM/yyyy")}</p>
-                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)} title="Editar cliente">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                     </div>
-                    {c.vehicles?.length > 0 && (
-                      <div className="flex gap-2 mt-3 flex-wrap">
-                        {c.vehicles.map((v: any) => (
-                          <Badge key={v.id} variant="outline" className="font-mono text-xs">
-                            {v.plate} · {VEHICLE_CATEGORY_LABELS[v.category]}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -88,27 +132,69 @@ export default function ClientesPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="ranking" className="mt-4">
-          <CRMRanking />
-        </TabsContent>
-
-        <TabsContent value="genero" className="mt-4">
-          <CRMGender />
-        </TabsContent>
+        <TabsContent value="ranking" className="mt-4"><CRMRanking /></TabsContent>
+        <TabsContent value="genero" className="mt-4"><CRMGender /></TabsContent>
       </Tabs>
+
+      {/* Modal de edição */}
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar Cliente</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={saveEdit} className="space-y-3">
+            <div>
+              <Label>Nome *</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+            </div>
+            <div>
+              <Label>Telefone *</Label>
+              <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} type="tel" required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Gênero</Label>
+                <Select value={editForm.gender} onValueChange={(v) => setEditForm({ ...editForm, gender: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NOT_INFORMED">Não informado</SelectItem>
+                    <SelectItem value="MALE">Masculino</SelectItem>
+                    <SelectItem value="FEMALE">Feminino</SelectItem>
+                    <SelectItem value="OTHER">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>É Uber?</Label>
+                <Select value={editForm.isUber ? "sim" : "nao"} onValueChange={(v) => setEditForm({ ...editForm, isUber: v === "sim" })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nao">Não</SelectItem>
+                    <SelectItem value="sim">Sim</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Observações</Label>
+              <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Anotações sobre o cliente" />
+            </div>
+            {editError && <p className="text-sm text-destructive">{editError}</p>}
+            <div className="flex gap-2 pt-1">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setEditing(null)} disabled={editSaving}>Cancelar</Button>
+              <Button type="submit" className="flex-1" disabled={editSaving}>{editSaving ? "Salvando..." : "Salvar"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function CRMRanking() {
   const [data, setData] = useState<any>(null);
-
-  useEffect(() => {
-    fetch("/api/crm/ranking").then((r) => r.json()).then(setData);
-  }, []);
-
+  useEffect(() => { fetch("/api/crm/ranking").then((r) => r.json()).then(setData); }, []);
   if (!data) return <p className="text-center text-muted-foreground py-8">Carregando...</p>;
-
   return (
     <div className="space-y-6">
       <div className="grid md:grid-cols-3 gap-4">
@@ -126,11 +212,10 @@ function CRMRanking() {
             ))}
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-blue-500" />Ranking Serviços</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {data.topServices?.map((s: any, i: number) => (
+            {data.topServices?.map((s: any) => (
               <div key={s.serviceName} className="flex items-center justify-between text-sm">
                 <span className="truncate max-w-[140px]">{s.serviceName}</span>
                 <div className="text-right">
@@ -141,7 +226,6 @@ function CRMRanking() {
             ))}
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Car className="w-4 h-4 text-green-500" />Por Categoria</CardTitle></CardHeader>
           <CardContent className="space-y-2">
@@ -154,18 +238,11 @@ function CRMRanking() {
           </CardContent>
         </Card>
       </div>
-
       {data.ticketMedio && (
         <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Ticket Médio</p>
-              <p className="text-2xl font-bold">{formatCurrency(data.ticketMedio)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Clientes Inativos (+30 dias)</p>
-              <p className="text-2xl font-bold text-orange-500">{data.inactiveCount}</p>
-            </div>
+          <CardContent className="p-4 flex items-center gap-6">
+            <div><p className="text-xs text-muted-foreground">Ticket Médio</p><p className="text-2xl font-bold">{formatCurrency(data.ticketMedio)}</p></div>
+            <div><p className="text-xs text-muted-foreground">Clientes Inativos (+30 dias)</p><p className="text-2xl font-bold text-orange-500">{data.inactiveCount}</p></div>
           </CardContent>
         </Card>
       )}
@@ -175,30 +252,20 @@ function CRMRanking() {
 
 function CRMGender() {
   const [data, setData] = useState<any>(null);
-
-  useEffect(() => {
-    fetch("/api/crm/genero").then((r) => r.json()).then(setData);
-  }, []);
-
+  useEffect(() => { fetch("/api/crm/genero").then((r) => r.json()).then(setData); }, []);
   if (!data) return <p className="text-center text-muted-foreground py-8">Carregando...</p>;
-
   const total = data.reduce((sum: number, g: any) => sum + g.count, 0);
-
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {data.map((g: any) => (
-          <Card key={g.gender}>
-            <CardContent className="p-4 text-center">
-              <p className="text-3xl font-bold">{g.count}</p>
-              <p className="text-sm text-muted-foreground">{GENDER_LABELS[g.gender]}</p>
-              <p className="text-xs text-primary font-medium mt-1">
-                {total > 0 ? Math.round((g.count / total) * 100) : 0}%
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {data.map((g: any) => (
+        <Card key={g.gender}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold">{g.count}</p>
+            <p className="text-sm text-muted-foreground">{GENDER_LABELS[g.gender]}</p>
+            <p className="text-xs text-primary font-medium mt-1">{total > 0 ? Math.round((g.count / total) * 100) : 0}%</p>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

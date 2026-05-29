@@ -172,7 +172,7 @@ export default function EntradaPage() {
         const vRes = await fetch("/api/veiculos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...vehicle, customerId }),
+          body: JSON.stringify({ ...vehicle, plate: vehicle.plate || plateInput, customerId }),
         });
         const vData = await vRes.json().catch(() => ({}));
         if (!vRes.ok) {
