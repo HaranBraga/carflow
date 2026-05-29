@@ -108,13 +108,23 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
   const startScanning = useCallback(async () => {
     try {
       setInitMsg("Iniciando câmera...");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
+
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        throw new Error("Câmera não suportada neste navegador.");
+      }
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
       }
 
       setInitMsg("Carregando OCR...");
@@ -133,9 +143,14 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
       setStatus("scanning");
       scanFrame();
     } catch (e: any) {
-      setInitMsg(e?.message?.includes("Permission")
-        ? "Permissão de câmera negada."
-        : "Erro ao iniciar câmera.");
+      const msg = e?.message || String(e);
+      if (msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("denied")) {
+        setInitMsg("Permissão de câmera negada. Permita o acesso nas configurações do navegador.");
+      } else if (msg.toLowerCase().includes("not supported") || msg.toLowerCase().includes("suportada")) {
+        setInitMsg(msg);
+      } else {
+        setInitMsg(`Erro: ${msg}`);
+      }
       setStatus("error");
     }
   }, [scanFrame]);
