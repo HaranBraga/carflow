@@ -7,8 +7,8 @@ const vehicleSchema = z.object({
   customerId: z.string(),
   plate: z.string().min(7).max(8),
   model: z.string().default(""),
-  brand: z.string().optional(),
-  color: z.string().optional(),
+  brand: z.string().optional().default(""),
+  color: z.string().optional().default(""),
   category: z.enum(["POPULAR", "SUV_MEDIO", "SUV_GRANDE", "CAMIONETE", "VAN_CAMINHAO", "MOTO", "TAPETE_RESIDENCIAL"]),
 });
 
@@ -57,22 +57,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const data = vehicleSchema.parse(body);
+  try {
+    const body = await req.json();
+    const data = vehicleSchema.parse(body);
 
-  const existing = await prisma.vehicle.findFirst({
-    where: { plate: formatPlate(data.plate) },
-    include: { customer: true },
-  });
+    const existing = await prisma.vehicle.findFirst({
+      where: { plate: formatPlate(data.plate) },
+      include: { customer: true },
+    });
 
-  if (existing) {
-    return NextResponse.json({ error: "Placa já cadastrada", vehicle: existing }, { status: 409 });
+    if (existing) {
+      return NextResponse.json({ error: "Placa já cadastrada", vehicle: existing }, { status: 409 });
+    }
+
+    const vehicle = await prisma.vehicle.create({
+      data: { ...data, plate: formatPlate(data.plate) },
+      include: { customer: true },
+    });
+
+    return NextResponse.json(vehicle, { status: 201 });
+  } catch (e: any) {
+    const msg = e?.issues
+      ? `Dados inválidos: ${e.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+      : (e?.message || "Erro ao cadastrar veículo");
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
-
-  const vehicle = await prisma.vehicle.create({
-    data: { ...data, plate: formatPlate(data.plate) },
-    include: { customer: true },
-  });
-
-  return NextResponse.json(vehicle, { status: 201 });
 }

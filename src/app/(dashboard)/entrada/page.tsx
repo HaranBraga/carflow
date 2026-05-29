@@ -174,7 +174,7 @@ export default function EntradaPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...vehicle, customerId }),
         });
-        const vData = await vRes.json();
+        const vData = await vRes.json().catch(() => ({}));
         if (!vRes.ok) {
           if (vRes.status === 409 && vData.vehicle?.id) {
             vehicleId = vData.vehicle.id;
