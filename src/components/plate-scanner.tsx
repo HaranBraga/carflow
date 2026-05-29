@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Camera, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -16,96 +16,97 @@ function extractBrazilianPlate(text: string): string | null {
   return null;
 }
 
-function cropAndEnhance(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-  // Crop a faixa horizontal central (onde fica a placa)
-  const cropX = vw * 0.05;
-  const cropY = vh * 0.35;
-  const cropW = vw * 0.90;
-  const cropH = vh * 0.30;
-
-  canvas.width = cropW;
-  canvas.height = cropH;
-  const ctx = canvas.getContext("2d")!;
-
-  // Desenha o recorte
-  ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-  // Aumenta contraste via filter (melhora OCR)
-  const imgData = ctx.getImageData(0, 0, cropW, cropH);
-  const data = imgData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-    // Binariza
-    const val = avg > 128 ? 255 : 0;
-    data[i] = data[i + 1] = data[i + 2] = val;
-  }
-  ctx.putImageData(imgData, 0, 0);
-}
-
 export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"init" | "scanning" | "found" | "error">("init");
-  const [detected, setDetected] = useState("");
   const [initMsg, setInitMsg] = useState("Iniciando câmera...");
+  const [detected, setDetected] = useState("");
+  const [attempts, setAttempts] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const workerRef = useRef<any>(null);
-  const loopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef(false);
+  const attemptsRef = useRef(0);
 
-  const stopAll = useCallback(() => {
+  function stopAll() {
     activeRef.current = false;
-    if (loopRef.current) clearTimeout(loopRef.current);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    if (workerRef.current) {
-      workerRef.current.terminate().catch(() => {});
-      workerRef.current = null;
-    }
-  }, []);
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    if (workerRef.current) { workerRef.current.terminate().catch(() => {}); workerRef.current = null; }
+  }
 
-  const close = useCallback(() => {
+  function close() {
     stopAll();
     setOpen(false);
     setStatus("init");
     setDetected("");
-    setInitMsg("Iniciando câmera...");
-  }, [stopAll]);
+    setAttempts(0);
+    attemptsRef.current = 0;
+  }
 
-  const scanFrame = useCallback(async () => {
+  function scheduleNext() {
+    if (!activeRef.current) return;
+    timerRef.current = setTimeout(doScan, 1500);
+  }
+
+  async function doScan() {
     if (!activeRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const worker = workerRef.current;
-    if (!video || !canvas || !worker || video.readyState < 2) {
-      loopRef.current = setTimeout(scanFrame, 800);
+
+    if (!video || !canvas || !worker || video.readyState < 3) {
+      scheduleNext();
       return;
     }
 
     try {
-      cropAndEnhance(video, canvas);
-      const blob: Blob = await new Promise((res) => canvas.toBlob((b) => res(b!), "image/png"));
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      // Recorte central — onde fica a placa na visão do guia
+      const cx = vw * 0.05;
+      const cy = vh * 0.38;
+      const cw = vw * 0.90;
+      const ch = vh * 0.24;
+
+      // Canvas em tamanho fixo para OCR (largura ideal ~800px)
+      const scale = 800 / cw;
+      canvas.width = 800;
+      canvas.height = Math.round(ch * scale);
+
+      const ctx = canvas.getContext("2d")!;
+      // Fundo branco
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Contraste aumentado via filter
+      ctx.filter = "contrast(1.8) brightness(1.1) grayscale(1)";
+      ctx.drawImage(video, cx, cy, cw, ch, 0, 0, canvas.width, canvas.height);
+      ctx.filter = "none";
+
+      const blob: Blob = await new Promise((res) =>
+        canvas.toBlob((b) => res(b!), "image/png")
+      );
+
       const { data: { text } } = await worker.recognize(blob);
       const plate = extractBrazilianPlate(text);
+
+      attemptsRef.current += 1;
+      setAttempts(attemptsRef.current);
+
       if (plate && activeRef.current) {
         setDetected(plate);
         setStatus("found");
-        return; // para o loop, aguarda confirmação
+        return;
       }
-    } catch { /* ignora frames com erro */ }
+    } catch { /* frame ruim — tenta novamente */ }
 
-    if (activeRef.current) {
-      loopRef.current = setTimeout(scanFrame, 1200);
-    }
-  }, []);
+    scheduleNext();
+  }
 
-  const startScanning = useCallback(async () => {
+  async function startScanning() {
     try {
       setInitMsg("Iniciando câmera...");
 
@@ -116,90 +117,94 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
         });
       } catch {
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
 
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = stream;
 
       setInitMsg("Carregando OCR...");
       const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng", 1, {
-        logger: () => {},
-      });
+      const worker = await createWorker("eng", 1, { logger: () => {} });
       await worker.setParameters({
         tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-        tessedit_pageseg_mode: "7" as any,
+        tessedit_pageseg_mode: "8" as any, // PSM 8 = trata como palavra única (ideal p/ placa)
       });
       workerRef.current = worker;
 
       activeRef.current = true;
+      attemptsRef.current = 0;
+      setAttempts(0);
       setStatus("scanning");
-      scanFrame();
+      timerRef.current = setTimeout(doScan, 1000);
     } catch (e: any) {
       const msg = e?.message || String(e);
-      if (msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("denied")) {
-        setInitMsg("Permissão de câmera negada. Permita o acesso nas configurações do navegador.");
-      } else if (msg.toLowerCase().includes("not supported") || msg.toLowerCase().includes("suportada")) {
-        setInitMsg(msg);
-      } else {
-        setInitMsg(`Erro: ${msg}`);
-      }
+      setInitMsg(
+        msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("denied")
+          ? "Permissão de câmera negada. Permita nas configurações do navegador."
+          : msg.toLowerCase().includes("suportada")
+          ? msg
+          : `Erro: ${msg}`
+      );
       setStatus("error");
     }
-  }, [scanFrame]);
+  }
 
-  useEffect(() => {
-    if (open) startScanning();
-    return () => { if (!open) stopAll(); };
-  }, [open, startScanning, stopAll]);
+  function retry() {
+    setDetected("");
+    attemptsRef.current = 0;
+    setAttempts(0);
+    setStatus("scanning");
+    activeRef.current = true;
+    timerRef.current = setTimeout(doScan, 300);
+  }
 
   function confirm() {
     onPlateDetected(detected);
     close();
   }
 
-  function retry() {
-    setDetected("");
-    setStatus("scanning");
-    activeRef.current = true;
-    loopRef.current = setTimeout(scanFrame, 500);
-  }
+  useEffect(() => {
+    if (open) startScanning();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => () => stopAll(), []);
 
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        onClick={() => setOpen(true)}
-        title="Escanear placa com câmera"
-      >
+      <Button type="button" variant="outline" size="icon" onClick={() => setOpen(true)} title="Escanear placa">
         <Camera className="w-4 h-4" />
       </Button>
 
       {open && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 bg-black/80">
-            <p className="text-white font-medium text-sm">
-              {status === "init" && initMsg}
-              {status === "scanning" && "Aponte para a placa..."}
-              {status === "found" && "Placa detectada!"}
-              {status === "error" && initMsg}
-            </p>
-            <Button variant="ghost" size="icon" onClick={close} className="text-white hover:text-white hover:bg-white/20">
+          <div className="flex items-center justify-between px-4 py-3 bg-black/80 shrink-0">
+            <div>
+              <p className="text-white font-medium text-sm">
+                {status === "init" && initMsg}
+                {status === "scanning" && "Aponte para a placa..."}
+                {status === "found" && "Placa detectada!"}
+                {status === "error" && initMsg}
+              </p>
+              {status === "scanning" && attempts > 0 && (
+                <p className="text-white/50 text-xs mt-0.5">
+                  {attempts} tentativa{attempts > 1 ? "s" : ""}
+                  {attempts >= 8 ? " — centralize a placa no guia" : ""}
+                </p>
+              )}
+            </div>
+            <Button variant="ghost" size="icon" onClick={close} className="text-white hover:bg-white/20">
               <X className="w-5 h-5" />
             </Button>
           </div>
 
-          {/* Câmera */}
-          <div className="flex-1 relative overflow-hidden bg-black flex items-center justify-center">
+          {/* Vídeo */}
+          <div className="flex-1 relative overflow-hidden bg-black">
             <video
               ref={videoRef}
               className="w-full h-full object-cover"
@@ -208,58 +213,52 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
               autoPlay
             />
 
-            {/* Guia: retângulo central onde deve ficar a placa */}
+            {/* Guia */}
             {status === "scanning" && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-[85%] h-[28%] border-2 border-white/80 rounded-lg relative">
-                  <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-yellow-400 rounded-tl" />
-                  <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-yellow-400 rounded-tr" />
-                  <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-yellow-400 rounded-bl" />
-                  <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-yellow-400 rounded-br" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-white/60 animate-spin" />
-                  </div>
+                {/* Escurecimento lateral */}
+                <div className="absolute inset-0 bg-black/40" />
+                {/* Janela transparente */}
+                <div className="relative w-[88%] h-[22%] z-10">
+                  <div className="absolute inset-0 bg-transparent border-0" />
+                  {/* Cantos */}
+                  <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-yellow-400 rounded-tl-sm" />
+                  <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-yellow-400 rounded-tr-sm" />
+                  <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-yellow-400 rounded-bl-sm" />
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-yellow-400 rounded-br-sm" />
+                  {/* Linha de scan animada */}
+                  <div className="absolute inset-x-0 h-0.5 bg-yellow-400/70 animate-pulse top-1/2" />
                 </div>
-                <p className="absolute bottom-[30%] text-white/70 text-xs mt-2">
-                  Centralize a placa no guia
+                <p className="absolute bottom-[36%] text-white/80 text-xs z-10">
+                  Centralize a placa dentro do guia
                 </p>
               </div>
             )}
 
             {/* Resultado */}
             {status === "found" && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <div className="bg-white rounded-2xl p-6 mx-6 text-center space-y-4 shadow-2xl">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                    <Camera className="w-6 h-6 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 mb-1">Placa detectada</p>
-                    <p className="text-4xl font-bold font-mono tracking-widest text-gray-900">{detected}</p>
-                  </div>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
+                <div className="bg-white rounded-2xl p-6 mx-6 text-center space-y-4 shadow-2xl w-full max-w-xs">
+                  <p className="text-sm text-gray-500">Placa detectada</p>
+                  <p className="text-4xl font-bold font-mono tracking-widest text-gray-900">{detected}</p>
                   <div className="flex gap-3">
-                    <Button variant="outline" className="flex-1" onClick={retry}>
-                      Reler
-                    </Button>
-                    <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={confirm}>
-                      Usar
-                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={retry}>Reler</Button>
+                    <Button className="flex-1 bg-green-600 hover:bg-green-700 text-white" onClick={confirm}>Usar</Button>
                   </div>
                 </div>
               </div>
             )}
 
             {status === "error" && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-                <div className="bg-white rounded-2xl p-6 mx-6 text-center space-y-3">
-                  <p className="text-red-600 font-medium">{initMsg}</p>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
+                <div className="bg-white rounded-2xl p-6 mx-6 text-center space-y-3 max-w-xs">
+                  <p className="text-red-600 font-medium text-sm">{initMsg}</p>
                   <Button variant="outline" className="w-full" onClick={close}>Fechar</Button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Canvas oculto para processamento */}
           <canvas ref={canvasRef} className="hidden" />
         </div>
       )}
