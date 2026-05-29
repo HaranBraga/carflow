@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState, useEffect } from "react";
-import { Camera, X, Loader2, ZoomIn } from "lucide-react";
+import { Camera, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -8,78 +8,42 @@ interface PlateScannerProps {
   onPlateDetected: (plate: string) => void;
 }
 
-function extractBrazilianPlate(text: string): string {
-  const clean = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const mercosul = clean.match(/[A-Z]{3}[0-9][A-Z][0-9]{2}/);
-  if (mercosul) return mercosul[0];
-  const old = clean.match(/[A-Z]{3}[0-9]{4}/);
-  if (old) return old[0];
-  // retorna o que tiver mesmo que incompleto para o usuário corrigir
-  return clean.slice(0, 8);
-}
-
-async function runOCR(canvas: HTMLCanvasElement): Promise<string> {
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng", 1, { logger: () => {} });
-
-  // Tenta PSM 8 (palavra única) e PSM 13 (linha raw) e fica com o melhor
-  const results: string[] = [];
-  for (const psm of ["8", "13", "7"]) {
-    await worker.setParameters({
-      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-      tessedit_pageseg_mode: psm as any,
-    });
-    const { data: { text } } = await worker.recognize(canvas);
-    const plate = extractBrazilianPlate(text);
-    if (plate.length === 7) { await worker.terminate(); return plate; }
-    results.push(plate);
-  }
-
-  await worker.terminate();
-  // Retorna o resultado mais longo encontrado
-  return results.sort((a, b) => b.length - a.length)[0] ?? "";
-}
-
 function captureFrame(
   video: HTMLVideoElement,
-  previewCanvas: HTMLCanvasElement,
-  ocrCanvas: HTMLCanvasElement
+  preview: HTMLCanvasElement,
+  ocr: HTMLCanvasElement
 ) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
 
-  // Preview: frame completo reduzido
-  previewCanvas.width = Math.min(vw, 600);
-  previewCanvas.height = Math.round(vh * (previewCanvas.width / vw));
-  const pCtx = previewCanvas.getContext("2d")!;
-  pCtx.drawImage(video, 0, 0, previewCanvas.width, previewCanvas.height);
+  // Preview: frame completo
+  preview.width = Math.min(vw, 640);
+  preview.height = Math.round(vh * (preview.width / vw));
+  preview.getContext("2d")!.drawImage(video, 0, 0, preview.width, preview.height);
 
-  // OCR: apenas a faixa central, escalada e tratada
-  const cropX = vw * 0.02;
-  const cropY = vh * 0.36;
-  const cropW = vw * 0.96;
-  const cropH = vh * 0.28;
-
-  ocrCanvas.width = 1200;
-  ocrCanvas.height = Math.round(cropH * (1200 / cropW));
-  const oCtx = ocrCanvas.getContext("2d")!;
-  oCtx.fillStyle = "#fff";
-  oCtx.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
-  oCtx.filter = "grayscale(1) contrast(2) brightness(1.15)";
-  oCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, ocrCanvas.width, ocrCanvas.height);
+  // OCR: faixa central escalada para 1200px
+  const cx = vw * 0.02, cy = vh * 0.30;
+  const cw = vw * 0.96, ch = vh * 0.40;
+  ocr.width = 1200;
+  ocr.height = Math.round(ch * (1200 / cw));
+  const ctx = ocr.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, ocr.width, ocr.height);
+  ctx.drawImage(video, cx, cy, cw, ch, 0, 0, ocr.width, ocr.height);
 }
 
 export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
-  const [open, setOpen] = useState(false);
-  const [phase, setPhase] = useState<"camera" | "processing" | "confirm" | "error">("camera");
+  const [open, setOpen]       = useState(false);
+  const [phase, setPhase]     = useState<"camera" | "processing" | "confirm" | "error">("camera");
   const [errorMsg, setErrorMsg] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [plateValue, setPlateValue] = useState("");
+  const [score, setScore]     = useState<number | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
-  const ocrCanvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const videoRef   = useRef<HTMLVideoElement>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
+  const ocrRef     = useRef<HTMLCanvasElement>(null);
+  const streamRef  = useRef<MediaStream | null>(null);
 
   function stopCamera() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -92,6 +56,7 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
     setPhase("camera");
     setPreviewUrl("");
     setPlateValue("");
+    setScore(null);
     setErrorMsg("");
   }
 
@@ -112,7 +77,7 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
       setErrorMsg(
         msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
           ? "Permissão de câmera negada. Permita nas configurações do navegador."
-          : `Erro ao abrir câmera: ${msg}`
+          : `Erro: ${msg}`
       );
       setPhase("error");
     }
@@ -120,21 +85,36 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
 
   async function capture() {
     const video = videoRef.current;
-    const previewCanvas = previewCanvasRef.current;
-    const ocrCanvas = ocrCanvasRef.current;
-    if (!video || !previewCanvas || !ocrCanvas || video.readyState < 2) return;
+    const preview = previewRef.current;
+    const ocr = ocrRef.current;
+    if (!video || !preview || !ocr || video.readyState < 2) return;
 
-    captureFrame(video, previewCanvas, ocrCanvas);
-    setPreviewUrl(previewCanvas.toDataURL("image/jpeg", 0.85));
+    captureFrame(video, preview, ocr);
+    setPreviewUrl(preview.toDataURL("image/jpeg", 0.9));
     setPhase("processing");
     stopCamera();
 
     try {
-      const plate = await runOCR(ocrCanvas);
-      setPlateValue(plate.slice(0, 8));
+      const imageBase64 = ocr.toDataURL("image/jpeg", 0.92);
+      const res = await fetch("/api/ocr-placa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64 }),
+      });
+      const data = await res.json();
+
+      if (data.plate) {
+        setPlateValue(data.plate.slice(0, 8));
+        setScore(data.score ?? null);
+      } else {
+        setPlateValue("");
+        setScore(null);
+      }
     } catch {
       setPlateValue("");
+      setScore(null);
     }
+
     setPhase("confirm");
   }
 
@@ -148,6 +128,7 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
     setPhase("camera");
     setPreviewUrl("");
     setPlateValue("");
+    setScore(null);
     startCamera();
   }
 
@@ -161,7 +142,13 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
 
   return (
     <>
-      <Button type="button" variant="outline" size="icon" onClick={() => setOpen(true)} title="Fotografar placa">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={() => setOpen(true)}
+        title="Fotografar placa"
+      >
         <Camera className="w-4 h-4" />
       </Button>
 
@@ -170,34 +157,29 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-black/90 shrink-0">
             <p className="text-white font-medium text-sm">
-              {phase === "camera" && "Enquadre a placa e capture"}
+              {phase === "camera"     && "Enquadre a placa e capture"}
               {phase === "processing" && "Lendo placa..."}
-              {phase === "confirm" && "Confirme a placa"}
-              {phase === "error" && "Erro"}
+              {phase === "confirm"    && "Confirme a placa"}
+              {phase === "error"      && "Erro"}
             </p>
             <Button variant="ghost" size="icon" onClick={close} className="text-white hover:bg-white/20">
               <X className="w-5 h-5" />
             </Button>
           </div>
 
-          {/* Conteúdo */}
           <div className="flex-1 relative overflow-hidden bg-black flex flex-col items-center justify-center">
 
-            {/* FASE: câmera ao vivo */}
+            {/* Câmera ao vivo */}
             {phase === "camera" && (
               <>
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-cover"
-                  playsInline muted autoPlay
-                />
+                <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
                 {/* Guia */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="absolute inset-0 bg-black/35" />
-                  <div className="relative w-[88%] h-[22%] z-10 border-2 border-white/60 rounded">
-                    <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-yellow-400" />
+                  <div className="relative w-[88%] h-[22%] z-10">
+                    <div className="absolute -top-1 -left-1  w-6 h-6 border-t-4 border-l-4 border-yellow-400" />
                     <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-yellow-400" />
-                    <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-yellow-400" />
+                    <div className="absolute -bottom-1 -left-1  w-6 h-6 border-b-4 border-l-4 border-yellow-400" />
                     <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-yellow-400" />
                   </div>
                   <p className="absolute bottom-[34%] text-white/80 text-xs z-10">
@@ -213,18 +195,18 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
               </>
             )}
 
-            {/* FASE: processando */}
+            {/* Processando */}
             {phase === "processing" && (
               <div className="flex flex-col items-center gap-4 text-white">
                 {previewUrl && (
                   <img src={previewUrl} alt="Captura" className="max-w-[90%] max-h-48 rounded-lg opacity-60" />
                 )}
                 <Loader2 className="w-8 h-8 animate-spin" />
-                <p className="text-sm text-white/70">Lendo placa com OCR...</p>
+                <p className="text-sm text-white/70">Reconhecendo placa...</p>
               </div>
             )}
 
-            {/* FASE: confirmar */}
+            {/* Confirmar */}
             {phase === "confirm" && (
               <div className="w-full max-w-sm mx-auto px-6 space-y-4">
                 {previewUrl && (
@@ -232,12 +214,27 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
                 )}
                 <div className="bg-white rounded-2xl p-5 space-y-4">
                   <div>
-                    <p className="text-sm text-gray-500 mb-1">
-                      {plateValue ? "Placa lida — confirme ou corrija:" : "OCR não detectou — digite a placa:"}
-                    </p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm text-gray-500">
+                        {plateValue
+                          ? "Placa lida — confirme ou corrija:"
+                          : "Não reconheceu — digite a placa:"}
+                      </p>
+                      {score !== null && (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          score >= 0.85 ? "bg-green-100 text-green-700"
+                          : score >= 0.6  ? "bg-yellow-100 text-yellow-700"
+                          : "bg-red-100 text-red-700"
+                        }`}>
+                          {Math.round(score * 100)}% confiança
+                        </span>
+                      )}
+                    </div>
                     <Input
                       value={plateValue}
-                      onChange={(e) => setPlateValue(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+                      onChange={(e) =>
+                        setPlateValue(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))
+                      }
                       className="text-2xl font-bold font-mono tracking-widest text-center h-14"
                       placeholder="ABC1D23"
                       maxLength={8}
@@ -260,7 +257,7 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
               </div>
             )}
 
-            {/* FASE: erro */}
+            {/* Erro */}
             {phase === "error" && (
               <div className="bg-white rounded-2xl p-6 mx-6 text-center space-y-3 max-w-xs">
                 <p className="text-red-600 font-medium text-sm">{errorMsg}</p>
@@ -269,8 +266,8 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
             )}
           </div>
 
-          <canvas ref={previewCanvasRef} className="hidden" />
-          <canvas ref={ocrCanvasRef} className="hidden" />
+          <canvas ref={previewRef} className="hidden" />
+          <canvas ref={ocrRef} className="hidden" />
         </div>
       )}
     </>
