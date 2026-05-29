@@ -208,22 +208,29 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
 
             {/* Confirmar */}
             {phase === "confirm" && (
-              <div className="w-full max-w-sm mx-auto px-6 space-y-4">
+              <div className="absolute inset-0 flex flex-col bg-black">
+                {/* Foto — altura limitada */}
                 {previewUrl && (
-                  <img src={previewUrl} alt="Captura" className="w-full rounded-lg" />
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <img
+                      src={previewUrl}
+                      alt="Captura"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
                 )}
-                <div className="bg-white rounded-2xl p-5 space-y-4">
+                {/* Card fixo no fundo */}
+                <div className="shrink-0 bg-white rounded-t-2xl px-5 pt-4 pb-6 space-y-4"
+                  style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
                   <div>
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-500">
-                        {plateValue
-                          ? "Placa lida — confirme ou corrija:"
-                          : "Não reconheceu — digite a placa:"}
+                        {plateValue ? "Confirme ou corrija:" : "Digite a placa:"}
                       </p>
                       {score !== null && (
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                           score >= 0.85 ? "bg-green-100 text-green-700"
-                          : score >= 0.6  ? "bg-yellow-100 text-yellow-700"
+                          : score >= 0.6 ? "bg-yellow-100 text-yellow-700"
                           : "bg-red-100 text-red-700"
                         }`}>
                           {Math.round(score * 100)}% confiança
@@ -235,18 +242,19 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
                       onChange={(e) =>
                         setPlateValue(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))
                       }
-                      className="text-2xl font-bold font-mono tracking-widest text-center h-14"
+                      className="text-3xl font-bold font-mono tracking-widest text-center h-16"
                       placeholder="ABC1D23"
                       maxLength={8}
                       autoFocus
                     />
                   </div>
                   <div className="flex gap-3">
-                    <Button variant="outline" className="flex-1" onClick={retake}>
+                    <Button variant="outline" size="lg" className="flex-1" onClick={retake}>
                       <Camera className="w-4 h-4 mr-1" /> Refoto
                     </Button>
                     <Button
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      size="lg"
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white text-base"
                       onClick={confirm}
                       disabled={plateValue.length < 7}
                     >
