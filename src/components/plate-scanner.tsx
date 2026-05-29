@@ -130,7 +130,6 @@ export function PlateScanner({ onPlateDetected }: PlateScannerProps) {
       setInitMsg("Carregando OCR...");
       const { createWorker } = await import("tesseract.js");
       const worker = await createWorker("eng", 1, {
-        workerBlobURL: false,
         logger: () => {},
       });
       await worker.setParameters({
