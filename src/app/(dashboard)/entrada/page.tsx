@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { VEHICLE_CATEGORY_LABELS, CHECKLIST_AREAS, formatPhone, formatCurrency } from "@/lib/utils";
+import { PlateScanner } from "@/components/plate-scanner";
 
 type Step = "placa" | "cliente" | "servicos" | "checklist" | "confirmacao";
 
@@ -270,6 +271,12 @@ export default function EntradaPage() {
               <Button onClick={searchPlate} disabled={searching}>
                 <Search className="w-4 h-4" />
               </Button>
+              <PlateScanner
+                onPlateDetected={(plate) => {
+                  setPlateInput(plate);
+                  setExistingVehicle(null);
+                }}
+              />
             </div>
 
             {existingVehicle && (
