@@ -93,7 +93,8 @@ export default async function DashboardPage() {
               {recentOrders.map((order) => (
                 <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-0">
                   <div>
-                    <p className="font-medium text-sm">{order.vehicle.plate} — {order.vehicle.customer.name}</p>
+                    <p className="font-medium text-sm">{order.vehicle.customer.name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">{order.vehicle.plate}</p>
                     <p className="text-xs text-muted-foreground">
                       {VEHICLE_CATEGORY_LABELS[order.vehicle.category]} • {format(order.arrivedAt, "HH:mm")}
                     </p>

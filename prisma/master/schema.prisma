@@ -21,6 +21,7 @@ model Tenant {
   evolutionApiUrl   String?
   evolutionApiKey   String?
   evolutionInstance String?
+  whatsappTemplate  String?
   active            Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

@@ -6,7 +6,7 @@ import { formatPlate } from "@/lib/utils";
 const vehicleSchema = z.object({
   customerId: z.string(),
   plate: z.string().min(7).max(8),
-  model: z.string().min(1),
+  model: z.string().default(""),
   brand: z.string().optional(),
   color: z.string().optional(),
   category: z.enum(["POPULAR", "SUV_MEDIO", "SUV_GRANDE", "CAMIONETE", "VAN_CAMINHAO", "MOTO", "TAPETE_RESIDENCIAL"]),

@@ -66,7 +66,17 @@ export async function sendWhatsAppMessage(
   }
 }
 
-export function buildCarReadyMessage(customerName: string, plate: string, services: string[]): string {
+const DEFAULT_TEMPLATE = `Olá, {nome}! 🚗✨\n\nSeu veículo *{placa}* está pronto!\n\nServiços realizados:\n{servicos}\n\nEstamos aguardando sua retirada. Obrigado pela preferência! 🙏`;
+
+export function buildCarReadyMessage(
+  customerName: string,
+  plate: string,
+  services: string[],
+  template?: string | null
+): string {
   const serviceList = services.map((s) => `  • ${s}`).join("\n");
-  return `Olá, ${customerName}! 🚗✨\n\nSeu veículo *${plate}* está pronto!\n\nServiços realizados:\n${serviceList}\n\nEstamos aguardando sua retirada. Obrigado pela preferência! 🙏`;
+  return (template || DEFAULT_TEMPLATE)
+    .replace(/\{nome\}/g, customerName)
+    .replace(/\{placa\}/g, plate)
+    .replace(/\{servicos\}/g, serviceList);
 }
