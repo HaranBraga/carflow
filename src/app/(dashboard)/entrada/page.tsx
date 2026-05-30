@@ -370,7 +370,7 @@ export default function EntradaPage() {
               onClick={() => goToStep("cliente")}
               disabled={searching || plateInput.replace(/[^A-Z0-9]/gi, "").length < 7 || (!existingVehicle && !vehicle.category)}
             >
-              Próximo: Cliente
+              Próximo
             </Button>
           </CardContent>
         </Card>
