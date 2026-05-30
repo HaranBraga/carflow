@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Car, LayoutDashboard, DollarSign, Users, Star,
-  CloudSun, BarChart2, LogOut, Menu, X, UserCheck, Wrench, History, Settings
+  CloudSun, BarChart2, LogOut, Menu, X, UserCheck, Wrench, History, Settings, TrendingUp
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ const navItems = [
   { href: "/entrada", label: "Entrada de Veículo", icon: Car },
   { href: "/lavagem", label: "Painel de Lavagem", icon: Wrench },
   { href: "/historico", label: "Histórico", icon: History },
-  { href: "/caixa", label: "Caixa do Dia", icon: DollarSign },
+  { href: "/financeiro", label: "Financeiro", icon: TrendingUp },
   { href: "/lavadores", label: "Lavadores", icon: UserCheck },
   { href: "/clientes", label: "CRM / Clientes", icon: Users },
   { href: "/servicos", label: "Serviços", icon: BarChart2 },

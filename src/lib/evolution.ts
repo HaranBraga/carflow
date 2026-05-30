@@ -66,7 +66,7 @@ export async function sendWhatsAppMessage(
   }
 }
 
-const DEFAULT_TEMPLATE = `Olá, {nome}! 🚗✨\n\nSeu veículo *{placa}* está pronto!\n\nServiços realizados:\n{servicos}\n\nEstamos aguardando sua retirada. Obrigado pela preferência! 🙏`;
+const DEFAULT_TEMPLATE = `Olá, {nome}! 🚗✨\n\nSeu veículo está pronto!\n\nServiços realizados:\n{servicos}\n\nEstamos aguardando sua retirada. Obrigado pela preferência! 🙏`;
 
 export function buildCarReadyMessage(
   customerName: string,
@@ -77,6 +77,6 @@ export function buildCarReadyMessage(
   const serviceList = services.map((s) => `  • ${s}`).join("\n");
   return (template || DEFAULT_TEMPLATE)
     .replace(/\{nome\}/g, customerName)
-    .replace(/\{placa\}/g, plate)
+    .replace(/\{placa\}/g, plate)  // mantido para compatibilidade com templates antigos
     .replace(/\{servicos\}/g, serviceList);
 }

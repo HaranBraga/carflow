@@ -11,7 +11,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
 
   const body = await req.json();
-  const { status, washerId, whatsappSent } = body;
+  const { status, washerId, whatsappSent, notes, addChecklist, addOpportunity } = body;
 
   const order = await prisma.serviceOrder.findUnique({ where: { id } });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -24,6 +24,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (washerId !== undefined) updateData.washerId = washerId;
   if (whatsappSent !== undefined) updateData.whatsappSent = whatsappSent;
+  if (notes !== undefined) updateData.notes = notes;
+
+  if (addChecklist) {
+    await prisma.checklistItem.create({
+      data: { orderId: id, area: addChecklist.area || "Avaria", hasIssue: true, notes: addChecklist.notes },
+    });
+  }
+
+  if (addOpportunity) {
+    await prisma.opportunity.create({
+      data: {
+        orderId: id,
+        description: addOpportunity.description,
+        estimatedValue: addOpportunity.estimatedValue || null,
+      },
+    });
+  }
 
   const updated = await prisma.serviceOrder.update({
     where: { id },
@@ -31,6 +48,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     include: {
       vehicle: { include: { customer: true } },
       items: { include: { service: true } },
+      checklist: true,
+      opportunities: true,
       washer: true,
     },
   });

@@ -9,19 +9,16 @@ datasource db {
   url      = env("TENANT_DATABASE_URL")
 }
 
-// Cada empresa tem seu próprio banco de dados.
-// O ID do gerente (managerId) refere-se ao User no MASTER DB.
-
 model Customer {
-  id          String      @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
-  phone       String      @unique
-  gender      Gender      @default(NOT_INFORMED)
-  isUber      Boolean     @default(false)
+  phone       String   @unique
+  gender      Gender   @default(NOT_INFORMED)
+  isUber      Boolean  @default(false)
   notes       String?
-  qrCodeToken String      @unique @default(cuid())
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  qrCodeToken String   @unique @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   vehicles  Vehicle[]
   feedbacks Feedback[]
@@ -40,7 +37,7 @@ model Vehicle {
   id         String          @id @default(cuid())
   customerId String
   plate      String          @unique
-  model      String
+  model      String          @default("")
   brand      String?
   color      String?
   category   VehicleCategory
@@ -63,13 +60,31 @@ enum VehicleCategory {
   TAPETE_RESIDENCIAL
 }
 
+model ServiceCategory {
+  id     String  @id @default(cuid())
+  name   String
+  active Boolean @default(true)
+
+  services Service[]
+
+  @@map("service_categories")
+}
+
+enum PricingType {
+  FIXED
+  PER_M2
+}
+
 model Service {
-  id          String  @id @default(cuid())
+  id          String      @id @default(cuid())
+  categoryId  String?
   name        String
   description String?
-  basePrice   Decimal @db.Decimal(10, 2)
-  active      Boolean @default(true)
+  basePrice   Decimal     @db.Decimal(10, 2)
+  pricingType PricingType @default(FIXED)
+  active      Boolean     @default(true)
 
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
   prices     ServicePrice[]
   orderItems OrderItem[]
 
@@ -125,7 +140,7 @@ model OrderItem {
   id        String  @id @default(cuid())
   orderId   String
   serviceId String
-  quantity  Int     @default(1)
+  quantity  Decimal @db.Decimal(10, 3) @default(1)
   unitPrice Decimal @db.Decimal(10, 2)
   discount  Decimal @db.Decimal(10, 2) @default(0)
   total     Decimal @db.Decimal(10, 2)
@@ -192,18 +207,31 @@ model WasherPayment {
   @@map("washer_payments")
 }
 
+model CashFlowCategory {
+  id     String       @id @default(cuid())
+  name   String
+  type   CashFlowType
+  active Boolean      @default(true)
+
+  cashFlows CashFlow[]
+
+  @@map("cash_flow_categories")
+}
+
 model CashFlow {
-  id          String       @id @default(cuid())
-  date        DateTime     @default(now())
+  id          String    @id @default(cuid())
+  date        DateTime  @default(now())
   type        CashFlowType
   category    String
+  categoryId  String?
   description String
-  amount      Decimal      @db.Decimal(10, 2)
+  amount      Decimal   @db.Decimal(10, 2)
   orderId     String?
-  closed      Boolean      @default(false)
-  createdAt   DateTime     @default(now())
+  closed      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
 
-  washerPayments WasherPayment[]
+  cashFlowCategory CashFlowCategory? @relation(fields: [categoryId], references: [id])
+  washerPayments   WasherPayment[]
 
   @@map("cash_flows")
 }

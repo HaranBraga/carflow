@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const DEFAULT_TEMPLATE = `Olá, {nome}! 🚗✨
 
-Seu veículo *{placa}* está pronto!
+Seu veículo está pronto!
 
 Serviços realizados:
 {servicos}
@@ -64,7 +64,6 @@ export default function ConfiguracoesPage() {
           <div className="bg-muted rounded-lg p-3 text-xs text-muted-foreground space-y-1">
             <p className="font-medium text-foreground">Variáveis disponíveis:</p>
             <p><code className="bg-background px-1 rounded">{"{nome}"}</code> — Nome do cliente</p>
-            <p><code className="bg-background px-1 rounded">{"{placa}"}</code> — Placa do veículo</p>
             <p><code className="bg-background px-1 rounded">{"{servicos}"}</code> — Lista de serviços realizados</p>
           </div>
 

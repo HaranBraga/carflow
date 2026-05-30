@@ -11,6 +11,8 @@ const serviceSchema = z.object({
   name: z.string().min(2),
   description: z.string().optional(),
   basePrice: z.number().nonnegative(),
+  categoryId: z.string().nullable().optional(),
+  pricingType: z.enum(["FIXED", "PER_M2"]).default("FIXED"),
   prices: z.array(z.object({
     category: z.enum(VEHICLE_CATEGORIES),
     price: z.number().nonnegative(),
@@ -28,7 +30,7 @@ export async function GET() {
   try {
     const services = await prisma.service.findMany({
       where: { active: true },
-      include: { prices: true },
+      include: { prices: true, category: true },
       orderBy: { name: "asc" },
     });
     return NextResponse.json(services);
@@ -59,11 +61,13 @@ export async function POST(req: NextRequest) {
         name: data.name,
         description: data.description,
         basePrice: data.basePrice,
+        pricingType: data.pricingType as any,
+        categoryId: data.categoryId || null,
         prices: {
           create: data.prices.map((p) => ({ category: p.category as any, price: p.price })),
         },
       },
-      include: { prices: true },
+      include: { prices: true, category: true },
     });
     return NextResponse.json(service, { status: 201 });
   } catch (e: any) {

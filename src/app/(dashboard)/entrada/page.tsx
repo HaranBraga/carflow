@@ -277,7 +277,7 @@ export default function EntradaPage() {
       {/* STEP 1: PLACA */}
       {step === "placa" && (
         <Card>
-          <CardHeader><CardTitle>Buscar ou Cadastrar Veículo</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Digite a placa do veículo</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
               <Input
@@ -322,10 +322,6 @@ export default function EntradaPage() {
                   <div>
                     <Label>Modelo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
                     <Input placeholder="Civic, Hilux..." value={vehicle.model} onChange={(e) => setVehicle({ ...vehicle, model: e.target.value })} />
-                  </div>
-                  <div>
-                    <Label>Marca <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                    <Input placeholder="Honda, Toyota..." value={vehicle.brand} onChange={(e) => setVehicle({ ...vehicle, brand: e.target.value })} />
                   </div>
                   <div>
                     <Label>Cor <span className="text-muted-foreground text-xs">(opcional)</span></Label>
@@ -447,7 +443,9 @@ export default function EntradaPage() {
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("cliente")} className="flex-1">Voltar</Button>
-              <Button onClick={() => goToStep("checklist")} className="flex-1">Próximo</Button>
+              <Button onClick={() => goToStep("checklist")} className="flex-1" disabled={services.length === 0}>
+                {services.length === 0 ? "Selecione ao menos 1 serviço" : "Próximo"}
+              </Button>
             </div>
           </CardContent>
         </Card>

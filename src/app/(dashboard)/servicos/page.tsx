@@ -27,12 +27,15 @@ const emptyForm = {
   name: "",
   description: "",
   basePrice: "",
+  categoryId: "",
+  pricingType: "FIXED" as "FIXED" | "PER_M2",
   prices: VEHICLE_CATEGORIES.map((c) => ({ category: c, price: "", enabled: false })) as CategoryPrice[],
   samePriceAll: true,
 };
 
 export default function ServicosPage() {
   const [services, setServices] = useState<ServiceData[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,8 +44,12 @@ export default function ServicosPage() {
   const [error, setError] = useState("");
 
   async function fetchServices() {
-    const res = await fetch("/api/servicos");
-    setServices(await res.json());
+    const [svcRes, catRes] = await Promise.all([
+      fetch("/api/servicos"),
+      fetch("/api/categorias-servico"),
+    ]);
+    setServices(await svcRes.json());
+    if (catRes.ok) setCategories(await catRes.json());
     setLoading(false);
   }
 
@@ -55,13 +62,15 @@ export default function ServicosPage() {
     setDialogOpen(true);
   }
 
-  function openEdit(svc: ServiceData) {
+  function openEdit(svc: ServiceData & { categoryId?: string; pricingType?: string }) {
     const priceByCat: Record<string, number> = {};
     svc.prices.forEach((p) => { priceByCat[p.category] = Number(p.price); });
     setForm({
       name: svc.name,
       description: svc.description ?? "",
       basePrice: String(svc.basePrice),
+      categoryId: svc.categoryId ?? "",
+      pricingType: (svc.pricingType as "FIXED" | "PER_M2") ?? "FIXED",
       prices: VEHICLE_CATEGORIES.map((c) => ({
         category: c,
         price: priceByCat[c] !== undefined ? String(priceByCat[c]) : "",
@@ -112,6 +121,8 @@ export default function ServicosPage() {
       name: form.name,
       description: form.description || undefined,
       basePrice,
+      pricingType: form.pricingType,
+      categoryId: form.categoryId || null,
       prices,
     };
 
@@ -219,10 +230,9 @@ export default function ServicosPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="categorias" className="mt-4">
-          <p className="text-sm text-muted-foreground mb-3">
-            Veja quais serviços se aplicam a cada categoria de veículo. Para editar os preços por categoria, abra a aba Serviços e clique em editar.
-          </p>
+        <TabsContent value="categorias" className="mt-4 space-y-4">
+          <CategoriaServicos categories={categories} onRefresh={fetchServices} />
+          <p className="text-sm font-medium text-muted-foreground mt-6 mb-2">Visão por tipo de veículo</p>
           <div className="grid md:grid-cols-2 gap-3">
             {servicesByCategory.map(({ category, services: applicable }) => (
               <Card key={category}>
@@ -238,12 +248,12 @@ export default function ServicosPage() {
                     <p className="text-xs text-muted-foreground">Nenhum serviço aplicável</p>
                   ) : (
                     <ul className="space-y-1">
-                      {applicable.map((svc) => {
-                        const catPrice = svc.prices.find((p) => p.category === category);
+                      {applicable.map((svc: any) => {
+                        const catPrice = svc.prices.find((p: any) => p.category === category);
                         const price = catPrice ? Number(catPrice.price) : Number(svc.basePrice);
                         return (
                           <li key={svc.id} className="flex justify-between text-sm">
-                            <span>{svc.name}</span>
+                            <span>{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</span>
                             <span className="font-medium">{formatCurrency(price)}</span>
                           </li>
                         );
@@ -269,10 +279,32 @@ export default function ServicosPage() {
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Lavagem Simples" required />
               </div>
               <div>
-                <Label>Preço base *</Label>
+                <Label>Categoria</Label>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                  value={form.categoryId}
+                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                >
+                  <option value="">Sem categoria</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label>Preço base * {form.pricingType === "PER_M2" && <span className="text-muted-foreground text-xs">(por m²)</span>}</Label>
                 <Input type="number" step="0.01" min="0" value={form.basePrice}
                   onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
                   placeholder="0,00" required />
+              </div>
+              <div>
+                <Label>Tipo de cobrança</Label>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                  value={form.pricingType}
+                  onChange={(e) => setForm({ ...form, pricingType: e.target.value as "FIXED" | "PER_M2" })}
+                >
+                  <option value="FIXED">Preço fixo</option>
+                  <option value="PER_M2">Por m² (tapete)</option>
+                </select>
               </div>
             </div>
             <div>
@@ -355,5 +387,91 @@ export default function ServicosPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function CategoriaServicos({ categories, onRefresh }: { categories: { id: string; name: string }[]; onRefresh: () => void }) {
+  const [newName, setNewName] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setSaving(true);
+    await fetch("/api/categorias-servico", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName.trim() }),
+    });
+    setNewName("");
+    setSaving(false);
+    onRefresh();
+  }
+
+  async function save(id: string) {
+    await fetch(`/api/categorias-servico/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName }),
+    });
+    setEditId(null);
+    onRefresh();
+  }
+
+  async function del(id: string) {
+    if (!confirm("Excluir categoria?")) return;
+    await fetch(`/api/categorias-servico/${id}`, { method: "DELETE" });
+    onRefresh();
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2"><Tag className="w-4 h-4" />Categorias de Serviço</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <form onSubmit={add} className="flex gap-2">
+          <input
+            className="flex-1 border rounded-md px-3 py-2 text-sm bg-background"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Nova categoria..."
+          />
+          <Button type="submit" size="sm" disabled={saving || !newName.trim()}>
+            <Plus className="w-4 h-4" />
+          </Button>
+        </form>
+        {categories.map((c) => (
+          <div key={c.id} className="flex items-center gap-2">
+            {editId === c.id ? (
+              <>
+                <input
+                  className="flex-1 border rounded-md px-3 py-1.5 text-sm bg-background"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  autoFocus
+                />
+                <Button size="sm" onClick={() => save(c.id)}>Salvar</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditId(null)}>Cancelar</Button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-sm">{c.name}</span>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                  onClick={() => { setEditId(c.id); setEditName(c.name); }}>
+                  <Pencil className="w-3 h-3" />
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => del(c.id)}>
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </>
+            )}
+          </div>
+        ))}
+        {categories.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma categoria ainda.</p>}
+      </CardContent>
+    </Card>
   );
 }
