@@ -133,7 +133,7 @@ export default function LavagemPage() {
                   key={order.id} order={order}
                   onStatusChange={updateStatus}
                   onFinishAndSend={finishAndSend}
-                  onModal={(type) => { setModal({ type, orderId: order.id }); setModalForm({ text: "", value: "" }); }}
+                  onModal={(type: ModalType) => { setModal({ type, orderId: order.id }); setModalForm({ text: "", value: "" }); }}
                   sending={sending === order.id}
                 />
               ))}
@@ -151,7 +151,7 @@ export default function LavagemPage() {
                   key={order.id} order={order}
                   onStatusChange={updateStatus}
                   onFinishAndSend={finishAndSend}
-                  onModal={(type) => { setModal({ type, orderId: order.id }); setModalForm({ text: "", value: "" }); }}
+                  onModal={(type: ModalType) => { setModal({ type, orderId: order.id }); setModalForm({ text: "", value: "" }); }}
                   sending={sending === order.id}
                 />
               ))}

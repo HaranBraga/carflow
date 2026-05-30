@@ -1,6 +1,6 @@
 "use client";
 import { use, useState, useEffect } from "react";
-import { Star, Send, CheckCircle, Instagram } from "lucide-react";
+import { Star, Send, CheckCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -82,7 +82,7 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
                     });
                   }}>
                   <Button className="bg-white text-pink-600 hover:bg-white/90 w-full gap-2 font-semibold">
-                    <Instagram className="w-4 h-4" />
+                    <ExternalLink className="w-4 h-4" />
                     Seguir no Instagram
                   </Button>
                 </a>
