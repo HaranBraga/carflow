@@ -14,7 +14,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/entrada", label: "Entrada de Veículo", icon: Car },
   { href: "/lavagem", label: "Painel de Lavagem", icon: Wrench },
-  { href: "/historico", label: "Histórico", icon: History },
+  { href: "/historico", label: "Lavagens do Dia", icon: History },
   { href: "/financeiro", label: "Financeiro", icon: TrendingUp },
   { href: "/lavadores", label: "Lavadores", icon: UserCheck },
   { href: "/clientes", label: "CRM / Clientes", icon: Users },

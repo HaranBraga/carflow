@@ -10,15 +10,16 @@ datasource db {
 }
 
 model Customer {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
-  phone       String   @unique
-  gender      Gender   @default(NOT_INFORMED)
-  isUber      Boolean  @default(false)
+  phone       String    @unique
+  gender      Gender    @default(NOT_INFORMED)
+  isUber      Boolean   @default(false)
   notes       String?
-  qrCodeToken String   @unique @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  birthdate   DateTime?
+  qrCodeToken String    @unique @default(cuid())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   vehicles  Vehicle[]
   feedbacks Feedback[]
@@ -244,9 +245,12 @@ enum CashFlowType {
 model Feedback {
   id          String    @id @default(cuid())
   customerId  String
+  orderId     String?
   token       String    @unique @default(cuid())
   rating      Int?
   comment     String?
+  birthdate   DateTime?
+  instagramFollowed Boolean @default(false)
   isPublic    Boolean   @default(false)
   submittedAt DateTime?
   createdAt   DateTime  @default(now())

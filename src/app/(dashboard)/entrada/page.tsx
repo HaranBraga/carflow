@@ -1,6 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
-import { Search, Car, User, CheckCircle, Lightbulb, X } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
+import { Search, Car, User, CheckCircle, Lightbulb, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,6 @@ interface VehicleData {
   id?: string;
   plate: string;
   model: string;
-  brand: string;
   color: string;
   category: string;
 }
@@ -39,7 +38,7 @@ interface ServiceItem {
 }
 
 const initialCustomer: CustomerData = { name: "", phone: "", gender: "NOT_INFORMED", isUber: false };
-const initialVehicle: VehicleData  = { plate: "", model: "", brand: "", color: "", category: "POPULAR" };
+const initialVehicle: VehicleData = { plate: "", model: "", color: "", category: "POPULAR" };
 
 export default function EntradaPage() {
   const submittingRef = useRef(false);
@@ -59,6 +58,12 @@ export default function EntradaPage() {
   const [opportunities, setOpportunities] = useState<string[]>([]);
   const [orderNotes, setOrderNotes] = useState("");
 
+  // Busca de cliente por telefone (quando placa não existe)
+  const [phoneSearch, setPhoneSearch] = useState("");
+  const [phoneSearchResult, setPhoneSearchResult] = useState<any>(null);
+  const [phoneSearching, setPhoneSearching] = useState(false);
+  const [showPhoneSearch, setShowPhoneSearch] = useState(false);
+
   function reset() {
     submittingRef.current = false;
     setStep("placa");
@@ -72,24 +77,62 @@ export default function EntradaPage() {
     setOrderNotes("");
     setError("");
     setSuccessInfo(null);
+    setPhoneSearch("");
+    setPhoneSearchResult(null);
+    setShowPhoneSearch(false);
   }
 
-  async function searchPlate() {
-    if (plateInput.length < 7) return;
+  // Auto-busca quando placa tem 7+ caracteres
+  useEffect(() => {
+    const plate = plateInput.replace(/[^A-Z0-9]/gi, "");
+    if (plate.length < 7) {
+      setExistingVehicle(null);
+      setCustomer(initialCustomer);
+      setVehicle(initialVehicle);
+      return;
+    }
+    const timer = setTimeout(() => searchPlate(plate), 500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plateInput]);
+
+  async function searchPlate(plate?: string) {
+    const p = plate || plateInput;
+    if (p.replace(/[^A-Z0-9]/gi, "").length < 7) return;
     setSearching(true);
     try {
-      const res = await fetch(`/api/veiculos?plate=${plateInput}`);
+      const res = await fetch(`/api/veiculos?plate=${p}`);
       const data = await res.json();
       if (data) {
         setExistingVehicle(data);
-        setVehicle({ ...data });
+        setVehicle({ id: data.id, plate: data.plate, model: data.model || "", color: data.color || "", category: data.category });
         setCustomer({ id: data.customer.id, name: data.customer.name, phone: data.customer.phone, gender: data.customer.gender, isUber: data.customer.isUber });
+        setShowPhoneSearch(false);
       } else {
         setExistingVehicle(null);
-        setVehicle((v) => ({ ...v, plate: plateInput.toUpperCase() }));
+        setVehicle((v) => ({ ...v, plate: p.toUpperCase() }));
+        setCustomer(initialCustomer);
+        setPhoneSearchResult(null);
+        setShowPhoneSearch(false);
       }
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function searchByPhone() {
+    if (phoneSearch.replace(/\D/g, "").length < 8) return;
+    setPhoneSearching(true);
+    try {
+      const res = await fetch(`/api/clientes?search=${phoneSearch.replace(/\D/g, "")}&limit=1`);
+      const data = await res.json();
+      const found = data.customers?.[0];
+      setPhoneSearchResult(found || null);
+      if (found) {
+        setCustomer({ id: found.id, name: found.name, phone: found.phone, gender: found.gender, isUber: found.isUber });
+      }
+    } finally {
+      setPhoneSearching(false);
     }
   }
 
@@ -124,17 +167,17 @@ export default function EntradaPage() {
     setServices([...services, { serviceId: svc.id, name: svc.name, unitPrice: priceForService(svc), quantity: 1, discount: 0 }]);
   }
 
-  function removeService(serviceId: string) {
-    setServices(services.filter((s) => s.serviceId !== serviceId));
+  function removeService(id: string) {
+    setServices(services.filter((s) => s.serviceId !== id));
   }
 
-  function addOpportunity(serviceId: string) {
-    if (!serviceId || opportunities.includes(serviceId)) return;
-    setOpportunities([...opportunities, serviceId]);
+  function addOpportunity(id: string) {
+    if (!id || opportunities.includes(id)) return;
+    setOpportunities([...opportunities, id]);
   }
 
-  function removeOpportunity(serviceId: string) {
-    setOpportunities(opportunities.filter((s) => s !== serviceId));
+  function removeOpportunity(id: string) {
+    setOpportunities(opportunities.filter((s) => s !== id));
   }
 
   const total = services.reduce((sum, s) => sum + s.unitPrice * s.quantity - s.discount, 0);
@@ -186,14 +229,8 @@ export default function EntradaPage() {
         }
       }
 
-      const checklistPayload = obs.trim()
-        ? [{ area: "Observações", hasIssue: true, notes: obs.trim() }]
-        : [];
-
-      const opportunitiesPayload = opportunityServices.map((svc: any) => ({
-        description: svc.name,
-        estimatedValue: priceForService(svc),
-      }));
+      const checklistPayload = obs.trim() ? [{ area: "Observações", hasIssue: true, notes: obs.trim() }] : [];
+      const opportunitiesPayload = opportunityServices.map((svc: any) => ({ description: svc.name, estimatedValue: priceForService(svc) }));
 
       const oRes = await fetch("/api/ordens", {
         method: "POST",
@@ -212,10 +249,7 @@ export default function EntradaPage() {
         throw new Error(e.error || `Erro ao criar ordem (${oRes.status})`);
       }
 
-      setSuccessInfo({
-        plate: vehicle.plate || existingVehicle?.plate,
-        customer: customer.name,
-      });
+      setSuccessInfo({ plate: vehicle.plate || plateInput, customer: customer.name });
     } catch (e: any) {
       setError(e?.message || "Erro ao registrar entrada");
       submittingRef.current = false;
@@ -239,7 +273,7 @@ export default function EntradaPage() {
                 <span className="font-mono font-bold">{successInfo.plate}</span> — {successInfo.customer}
               </p>
             </div>
-            <Button onClick={reset} size="lg" className="mt-2">
+            <Button onClick={reset} size="lg">
               <Car className="w-4 h-4 mr-2" /> Nova Entrada
             </Button>
           </CardContent>
@@ -263,7 +297,6 @@ export default function EntradaPage() {
         <h1 className="text-2xl font-bold">Entrada de Veículo</h1>
       </div>
 
-      {/* Steps */}
       <div className="flex items-center gap-2 text-xs overflow-x-auto pb-1">
         {steps.map(({ key, label }, i, arr) => (
           <div key={key} className="flex items-center gap-2 shrink-0">
@@ -280,34 +313,35 @@ export default function EntradaPage() {
           <CardHeader><CardTitle>Digite a placa do veículo</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
-              <Input
-                placeholder="ABC-1234 ou ABC1D23"
-                value={plateInput}
-                onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === "Enter" && searchPlate()}
-                className="text-lg font-mono uppercase tracking-widest"
-                maxLength={8}
-              />
-              <Button onClick={searchPlate} disabled={searching}><Search className="w-4 h-4" /></Button>
-              <PlateScanner onPlateDetected={(plate) => { setPlateInput(plate); setExistingVehicle(null); }} />
+              <div className="relative flex-1">
+                <Input
+                  placeholder="ABC-1234 ou ABC1D23"
+                  value={plateInput}
+                  onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
+                  className="text-lg font-mono uppercase tracking-widest pr-8"
+                  maxLength={8}
+                />
+                {searching && (
+                  <Loader2 className="absolute right-3 top-3 w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              <PlateScanner onPlateDetected={(plate) => { setPlateInput(plate); }} />
             </div>
 
             {existingVehicle && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-1">
-                <p className="font-semibold text-green-800">Veículo encontrado!</p>
-                <p className="text-sm">{existingVehicle.brand} {existingVehicle.model} — {VEHICLE_CATEGORY_LABELS[existingVehicle.category]}</p>
-                <p className="text-sm text-muted-foreground">Cliente: {existingVehicle.customer?.name} · {formatPhone(existingVehicle.customer?.phone || "")}</p>
+                <p className="font-semibold text-green-800">✓ Veículo encontrado</p>
+                <p className="text-sm">{existingVehicle.model} {existingVehicle.color ? `· ${existingVehicle.color}` : ""} — {VEHICLE_CATEGORY_LABELS[existingVehicle.category]}</p>
+                <p className="text-sm text-muted-foreground">Cliente: <strong>{existingVehicle.customer?.name}</strong> · {formatPhone(existingVehicle.customer?.phone || "")}</p>
               </div>
             )}
 
-            {!existingVehicle && plateInput.length >= 7 && (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">Novo veículo. Preencha os dados:</p>
+            {!existingVehicle && plateInput.replace(/[^A-Z0-9]/gi, "").length >= 7 && !searching && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800 font-medium">Placa não encontrada. Preencha os dados do veículo.</p>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Placa</Label>
-                    <Input value={vehicle.plate || plateInput} readOnly className="font-mono uppercase" />
-                  </div>
                   <div>
                     <Label>Categoria *</Label>
                     <Select value={vehicle.category} onValueChange={(v) => setVehicle({ ...vehicle, category: v })}>
@@ -334,7 +368,7 @@ export default function EntradaPage() {
             <Button
               className="w-full"
               onClick={() => goToStep("cliente")}
-              disabled={!existingVehicle && (plateInput.length < 7 || !vehicle.category)}
+              disabled={searching || plateInput.replace(/[^A-Z0-9]/gi, "").length < 7 || (!existingVehicle && !vehicle.category)}
             >
               Próximo: Cliente
             </Button>
@@ -353,39 +387,88 @@ export default function EntradaPage() {
                 <p className="text-sm text-muted-foreground">{formatPhone(customer.phone)}</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div>
-                  <Label>Nome *</Label>
-                  <Input value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Nome do cliente" />
-                </div>
-                <div>
-                  <Label>Telefone / WhatsApp *</Label>
-                  <Input value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="(11) 99999-0000" type="tel" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Gênero</Label>
-                    <Select value={customer.gender} onValueChange={(v) => setCustomer({ ...customer, gender: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NOT_INFORMED">Não informado</SelectItem>
-                        <SelectItem value="MALE">Masculino</SelectItem>
-                        <SelectItem value="FEMALE">Feminino</SelectItem>
-                        <SelectItem value="OTHER">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
+              <div className="space-y-4">
+                {/* Buscar cliente existente por telefone */}
+                {!customer.id && (
+                  <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
+                    <p className="text-sm font-medium">Cliente já tem cadastro? Busque pelo telefone:</p>
+                    <div className="flex gap-2">
+                      <Input
+                        value={phoneSearch}
+                        onChange={(e) => setPhoneSearch(e.target.value)}
+                        placeholder="(11) 99999-0000"
+                        type="tel"
+                        className="flex-1"
+                      />
+                      <Button type="button" variant="outline" onClick={searchByPhone} disabled={phoneSearching}>
+                        {phoneSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                    {phoneSearchResult && (
+                      <div className="bg-green-50 border border-green-200 rounded p-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{phoneSearchResult.name}</p>
+                          <p className="text-xs text-muted-foreground">{formatPhone(phoneSearchResult.phone)}</p>
+                        </div>
+                        <Button size="sm" onClick={() => {
+                          setCustomer({ id: phoneSearchResult.id, name: phoneSearchResult.name, phone: phoneSearchResult.phone, gender: phoneSearchResult.gender, isUber: phoneSearchResult.isUber });
+                        }}>Usar</Button>
+                      </div>
+                    )}
+                    {phoneSearch && !phoneSearching && phoneSearchResult === null && (
+                      <p className="text-xs text-muted-foreground">Nenhum cliente encontrado com esse telefone.</p>
+                    )}
                   </div>
-                  <div>
-                    <Label>É Uber?</Label>
-                    <Select value={customer.isUber ? "sim" : "nao"} onValueChange={(v) => setCustomer({ ...customer, isUber: v === "sim" })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nao">Não</SelectItem>
-                        <SelectItem value="sim">Sim</SelectItem>
-                      </SelectContent>
-                    </Select>
+                )}
+
+                {/* Formulário novo cliente ou cliente selecionado */}
+                {customer.id ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{customer.name}</p>
+                      <p className="text-sm text-muted-foreground">{formatPhone(customer.phone)}</p>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => setCustomer(initialCustomer)}>
+                      <X className="w-4 h-4" />
+                    </Button>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground font-medium">— ou cadastre um novo cliente —</p>
+                    <div>
+                      <Label>Nome *</Label>
+                      <Input value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Nome do cliente" />
+                    </div>
+                    <div>
+                      <Label>Telefone / WhatsApp *</Label>
+                      <Input value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="(11) 99999-0000" type="tel" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Gênero</Label>
+                        <Select value={customer.gender} onValueChange={(v) => setCustomer({ ...customer, gender: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="NOT_INFORMED">Não informado</SelectItem>
+                            <SelectItem value="MALE">Masculino</SelectItem>
+                            <SelectItem value="FEMALE">Feminino</SelectItem>
+                            <SelectItem value="OTHER">Outro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>É Uber?</Label>
+                        <Select value={customer.isUber ? "sim" : "nao"} onValueChange={(v) => setCustomer({ ...customer, isUber: v === "sim" })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nao">Não</SelectItem>
+                            <SelectItem value="sim">Sim</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             <div className="flex gap-2">
@@ -408,17 +491,13 @@ export default function EntradaPage() {
             </p>
             <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto">
               {availableServices.filter(serviceAppliesToCategory).map((svc) => (
-                <button
-                  key={svc.id}
-                  onClick={() => addService(svc)}
-                  className={`text-left p-2 rounded-lg border text-sm transition-colors ${services.find((s) => s.serviceId === svc.id) ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"}`}
-                >
-                  <p className="font-medium truncate">{svc.name}</p>
+                <button key={svc.id} onClick={() => addService(svc)}
+                  className={`text-left p-2 rounded-lg border text-sm transition-colors ${services.find((s) => s.serviceId === svc.id) ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"}`}>
+                  <p className="font-medium truncate">{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</p>
                   <p className="text-xs text-muted-foreground">{formatCurrency(priceForService(svc))}</p>
                 </button>
               ))}
             </div>
-
             {services.length > 0 && (
               <div className="space-y-2 border-t pt-3">
                 {services.map((s) => (
@@ -435,16 +514,14 @@ export default function EntradaPage() {
                 </div>
               </div>
             )}
-
             <div>
               <Label>Observações</Label>
               <Textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Informações adicionais..." rows={2} />
             </div>
-
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("cliente")} className="flex-1">Voltar</Button>
               <Button onClick={() => goToStep("checklist")} className="flex-1" disabled={services.length === 0}>
-                {services.length === 0 ? "Selecione ao menos 1 serviço" : "Próximo"}
+                {services.length === 0 ? "Selecione ao menos 1" : "Próximo"}
               </Button>
             </div>
           </CardContent>
@@ -456,49 +533,38 @@ export default function EntradaPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5" />
-              Avarias e Oportunidades
+              <CheckCircle className="w-5 h-5" /> Avarias e Oportunidades
               <Badge variant="outline" className="ml-auto text-xs">Opcional</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
               <Label>Observações de avarias</Label>
-              <Textarea
-                value={obs}
-                onChange={(e) => setObs(e.target.value)}
-                placeholder="Ex: Arranhão no para-choque traseiro, espelho quebrado..."
-                rows={3}
-              />
+              <Textarea value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex: Arranhão no para-choque traseiro..." rows={3} />
             </div>
-
             <div className="border-t pt-4">
               <p className="text-sm font-medium flex items-center gap-2 mb-2">
                 <Lightbulb className="w-4 h-4 text-yellow-500" /> Oportunidades de Serviço
               </p>
-              <p className="text-xs text-muted-foreground mb-2">Serviços a oferecer ao cliente</p>
               <Select value="" onValueChange={addOpportunity}>
                 <SelectTrigger><SelectValue placeholder="Adicionar serviço..." /></SelectTrigger>
                 <SelectContent>
                   {availableServices.filter(serviceAppliesToCategory).filter((svc) => !opportunities.includes(svc.id)).map((svc) => (
-                    <SelectItem key={svc.id} value={svc.id}>
-                      {svc.name} — {formatCurrency(priceForService(svc))}
-                    </SelectItem>
+                    <SelectItem key={svc.id} value={svc.id}>{svc.name} — {formatCurrency(priceForService(svc))}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {opportunityServices.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {opportunityServices.map((svc: any) => (
-                    <div key={svc.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
-                      <span className="text-sm">{svc.name} — {formatCurrency(priceForService(svc))}</span>
+                    <div key={svc.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
+                      <span className="text-sm">{svc.name}</span>
                       <button onClick={() => removeOpportunity(svc.id)} className="text-destructive"><X className="w-4 h-4" /></button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("servicos")} className="flex-1">Voltar</Button>
               <Button onClick={() => setStep("confirmacao")} className="flex-1">Próximo: Confirmar</Button>
@@ -515,8 +581,8 @@ export default function EntradaPage() {
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="bg-muted rounded-lg p-3">
                 <p className="text-xs text-muted-foreground mb-1">Veículo</p>
-                <p className="font-bold font-mono">{vehicle.plate || existingVehicle?.plate}</p>
-                <p>{existingVehicle?.brand || vehicle.brand} {existingVehicle?.model || vehicle.model}</p>
+                <p className="font-bold font-mono">{vehicle.plate || plateInput}</p>
+                <p>{vehicle.model} {vehicle.color}</p>
                 <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</p>
               </div>
               <div className="bg-muted rounded-lg p-3">
@@ -526,10 +592,8 @@ export default function EntradaPage() {
                 {customer.isUber && <Badge variant="info" className="mt-1">Uber</Badge>}
               </div>
             </div>
-
             {services.length > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Serviços</p>
                 {services.map((s) => (
                   <div key={s.serviceId} className="flex justify-between text-sm py-0.5">
                     <span>{s.name}</span><span className="font-medium">{formatCurrency(s.unitPrice)}</span>
@@ -540,27 +604,13 @@ export default function EntradaPage() {
                 </div>
               </div>
             )}
-
             {obs && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                 <p className="text-xs font-medium text-orange-700 mb-1">Avarias:</p>
                 <p className="text-xs text-orange-700">{obs}</p>
               </div>
             )}
-
-            {opportunityServices.length > 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-xs font-medium text-yellow-700 mb-1">Oportunidades:</p>
-                {opportunityServices.map((svc: any) => (
-                  <p key={svc.id} className="text-xs text-yellow-700">• {svc.name} ({formatCurrency(priceForService(svc))})</p>
-                ))}
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>
-            )}
-
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>}
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("checklist")} className="flex-1" disabled={loading}>Voltar</Button>
               <Button onClick={submitOrder} disabled={loading} className="flex-1" variant="success">

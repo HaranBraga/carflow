@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Car, MessageCircle, Play, CheckCircle, Package, RefreshCw, AlertTriangle, Lightbulb } from "lucide-react";
+import { Car, MessageCircle, Play, CheckCircle, Package, RefreshCw, AlertTriangle, Lightbulb, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -282,9 +282,14 @@ function OrderCard({ order, onStatusChange, onFinishAndSend, onModal, sending }:
             </>
           )}
           {order.status === "FINISHED" && (
-            <div className="flex items-center gap-2 w-full">
+            <div className="flex items-center gap-2 w-full flex-wrap">
               <Button size="sm" variant="outline" onClick={() => onStatusChange(order.id, "DELIVERED")} className="gap-1">
                 <Package className="w-3 h-3" /> Entregue
+              </Button>
+              <Button size="sm" variant="outline"
+                onClick={() => window.open(`/imprimir/${order.id}`, "_blank")}
+                className="gap-1">
+                <Printer className="w-3 h-3" /> Imprimir
               </Button>
               {order.whatsappSent && (
                 <span className="text-xs text-green-600 flex items-center gap-1">
