@@ -11,6 +11,9 @@ const updateSchema = z.object({
   name: z.string().min(2).optional(),
   description: z.string().nullable().optional(),
   basePrice: z.number().nonnegative().optional(),
+  pricingType: z.enum(["FIXED", "PER_M2"]).optional(),
+  categoryId: z.string().nullable().optional(),
+  isOpportunityOnly: z.boolean().optional(),
   active: z.boolean().optional(),
   prices: z.array(z.object({
     category: z.enum(VEHICLE_CATEGORIES),

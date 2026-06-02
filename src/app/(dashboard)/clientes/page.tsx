@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Users, Search, Star, TrendingUp, Car, Pencil, X } from "lucide-react";
+import { Users, Search, Star, TrendingUp, Car, Pencil, X, Lightbulb, Phone, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,7 @@ export default function ClientesPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="clientes">Clientes</TabsTrigger>
+          <TabsTrigger value="oportunidades">Oportunidades</TabsTrigger>
           <TabsTrigger value="ranking">Rankings</TabsTrigger>
           <TabsTrigger value="genero">Por Gênero</TabsTrigger>
         </TabsList>
@@ -132,6 +133,7 @@ export default function ClientesPage() {
           )}
         </TabsContent>
 
+        <TabsContent value="oportunidades" className="mt-4"><CRMOportunidades /></TabsContent>
         <TabsContent value="ranking" className="mt-4"><CRMRanking /></TabsContent>
         <TabsContent value="genero" className="mt-4"><CRMGender /></TabsContent>
       </Tabs>
@@ -266,6 +268,116 @@ function CRMGender() {
           </CardContent>
         </Card>
       ))}
+    </div>
+  );
+}
+
+function CRMOportunidades() {
+  const [items, setItems] = useState<any[]>([]);
+  const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const [loading, setLoading] = useState(true);
+
+  async function load(f = filter) {
+    setLoading(true);
+    const url = f === "pending" ? "/api/oportunidades?contacted=false" : "/api/oportunidades";
+    const res = await fetch(url);
+    if (res.ok) setItems(await res.json());
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+  useEffect(() => { load(filter); }, [filter]);
+
+  async function markContacted(id: string, contacted: boolean) {
+    await fetch(`/api/oportunidades/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contacted }),
+    });
+    load(filter);
+  }
+
+  const grouped = items.reduce((acc: Record<string, any[]>, op) => {
+    const key = op.order.vehicle.customer.id;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(op);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Lightbulb className="w-5 h-5 text-yellow-500" />
+          <p className="font-semibold">Oportunidades a Abordar</p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant={filter === "pending" ? "default" : "outline"} onClick={() => setFilter("pending")}>
+            Pendentes
+          </Button>
+          <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
+            Todas
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-center text-muted-foreground py-8">Carregando...</p>
+      ) : Object.keys(grouped).length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Lightbulb className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>{filter === "pending" ? "Nenhuma oportunidade pendente." : "Nenhuma oportunidade registrada."}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {Object.values(grouped).map((ops) => {
+            const customer = ops[0].order.vehicle.customer;
+            const plate = ops[0].order.vehicle.plate;
+            const allContacted = ops.every((o) => o.contacted);
+            return (
+              <Card key={customer.id} className={allContacted ? "opacity-60" : ""}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold">{customer.name}</p>
+                      <p className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Phone className="w-3 h-3" />
+                        <a href={`tel:${customer.phone}`} className="hover:underline">{formatPhone(customer.phone)}</a>
+                        <span className="font-mono text-xs">· {plate}</span>
+                      </p>
+                    </div>
+                    {allContacted && (
+                      <Badge variant="secondary" className="text-xs shrink-0">Contatado</Badge>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {ops.map((op) => (
+                      <div key={op.id} className={`flex items-center justify-between rounded-lg px-3 py-2 ${op.contacted ? "bg-muted" : "bg-yellow-50 border border-yellow-200"}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{op.description}</p>
+                          {op.estimatedValue && (
+                            <p className="text-xs text-muted-foreground">{formatCurrency(Number(op.estimatedValue))}</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={op.contacted ? "ghost" : "outline"}
+                          className={`shrink-0 ml-2 gap-1 text-xs ${op.contacted ? "text-muted-foreground" : "text-green-700 border-green-300 hover:bg-green-50"}`}
+                          onClick={() => markContacted(op.id, !op.contacted)}
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          {op.contacted ? "Desfazer" : "Contatado"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

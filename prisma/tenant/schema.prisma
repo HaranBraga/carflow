@@ -77,13 +77,14 @@ enum PricingType {
 }
 
 model Service {
-  id          String      @id @default(cuid())
-  categoryId  String?
-  name        String
-  description String?
-  basePrice   Decimal     @db.Decimal(10, 2)
-  pricingType PricingType @default(FIXED)
-  active      Boolean     @default(true)
+  id                String      @id @default(cuid())
+  categoryId        String?
+  name              String
+  description       String?
+  basePrice         Decimal     @db.Decimal(10, 2)
+  pricingType       PricingType @default(FIXED)
+  isOpportunityOnly Boolean     @default(false)
+  active            Boolean     @default(true)
 
   category   ServiceCategory? @relation(fields: [categoryId], references: [id])
   prices     ServicePrice[]

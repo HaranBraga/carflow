@@ -93,6 +93,7 @@ export default function LavagemPage() {
   }
 
   function serviceAppliesToCategory(svc: any, category: string): boolean {
+    // No painel, as oportunidades incluem serviços de qualquer tipo
     if (!svc.prices || svc.prices.length === 0) return true;
     if (!category) return true;
     return svc.prices.some((p: any) => p.category === category);

@@ -13,6 +13,7 @@ const serviceSchema = z.object({
   basePrice: z.number().nonnegative(),
   categoryId: z.string().nullable().optional(),
   pricingType: z.enum(["FIXED", "PER_M2"]).default("FIXED"),
+  isOpportunityOnly: z.boolean().default(false),
   prices: z.array(z.object({
     category: z.enum(VEHICLE_CATEGORIES),
     price: z.number().nonnegative(),
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
         description: data.description,
         basePrice: data.basePrice,
         pricingType: data.pricingType as any,
+        isOpportunityOnly: data.isOpportunityOnly,
         categoryId: data.categoryId || null,
         prices: {
           create: data.prices.map((p) => ({ category: p.category as any, price: p.price })),

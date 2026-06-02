@@ -29,6 +29,7 @@ const emptyForm = {
   basePrice: "",
   categoryId: "",
   pricingType: "FIXED" as "FIXED" | "PER_M2",
+  isOpportunityOnly: false,
   prices: VEHICLE_CATEGORIES.map((c) => ({ category: c, price: "", enabled: false })) as CategoryPrice[],
   samePriceAll: true,
 };
@@ -71,6 +72,7 @@ export default function ServicosPage() {
       basePrice: String(svc.basePrice),
       categoryId: svc.categoryId ?? "",
       pricingType: (svc.pricingType as "FIXED" | "PER_M2") ?? "FIXED",
+      isOpportunityOnly: (svc as any).isOpportunityOnly ?? false,
       prices: VEHICLE_CATEGORIES.map((c) => ({
         category: c,
         price: priceByCat[c] !== undefined ? String(priceByCat[c]) : "",
@@ -123,6 +125,7 @@ export default function ServicosPage() {
       basePrice,
       pricingType: form.pricingType,
       categoryId: form.categoryId || null,
+      isOpportunityOnly: form.isOpportunityOnly,
       prices,
     };
 
@@ -195,8 +198,11 @@ export default function ServicosPage() {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold">{s.name}</p>
+                          {(s as any).isOpportunityOnly && (
+                            <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 text-xs">Só oportunidade</Badge>
+                          )}
                           {s.prices.length === 0 ? (
                             <Badge variant="secondary">Preço único: {formatCurrency(Number(s.basePrice))}</Badge>
                           ) : (
@@ -311,6 +317,22 @@ export default function ServicosPage() {
               <Label>Descrição</Label>
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição do serviço" />
             </div>
+
+            <label className="flex items-start gap-3 cursor-pointer bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <input
+                type="checkbox"
+                checked={form.isOpportunityOnly}
+                onChange={(e) => setForm({ ...form, isOpportunityOnly: e.target.checked })}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-medium">Apenas oportunidade (não é serviço imediato)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Aparece somente na lista de oportunidades a oferecer, não nos serviços do atendimento.
+                  Ex: Cristalização, Polimento, Higienização completa.
+                </p>
+              </div>
+            </label>
 
             <div className="border-t pt-4 space-y-3">
               <div className="flex items-center justify-between">

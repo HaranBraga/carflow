@@ -155,7 +155,9 @@ export default function EntradaPage() {
     return Number(svc.basePrice);
   }
 
-  function serviceAppliesToCategory(svc: any): boolean {
+  function serviceAppliesToCategory(svc: any, forOpportunity = false): boolean {
+    // Serviços "apenas oportunidade" não aparecem na lista de execução
+    if (!forOpportunity && svc.isOpportunityOnly) return false;
     if (!svc.prices || svc.prices.length === 0) return true;
     const cat = vehicle.category || existingVehicle?.category;
     if (!cat) return true;
@@ -490,7 +492,7 @@ export default function EntradaPage() {
               Preços para <strong>{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</strong>
             </p>
             <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto">
-              {availableServices.filter(serviceAppliesToCategory).map((svc) => (
+              {availableServices.filter((s) => serviceAppliesToCategory(s, false)).map((svc) => (
                 <button key={svc.id} onClick={() => addService(svc)}
                   className={`text-left p-2 rounded-lg border text-sm transition-colors ${services.find((s) => s.serviceId === svc.id) ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"}`}>
                   <p className="font-medium truncate">{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</p>
@@ -549,7 +551,7 @@ export default function EntradaPage() {
               <Select value="" onValueChange={addOpportunity}>
                 <SelectTrigger><SelectValue placeholder="Adicionar serviço..." /></SelectTrigger>
                 <SelectContent>
-                  {availableServices.filter(serviceAppliesToCategory).filter((svc) => !opportunities.includes(svc.id)).map((svc) => (
+                  {availableServices.filter((s) => serviceAppliesToCategory(s, true)).filter((svc) => !opportunities.includes(svc.id)).map((svc) => (
                     <SelectItem key={svc.id} value={svc.id}>{svc.name} — {formatCurrency(priceForService(svc))}</SelectItem>
                   ))}
                 </SelectContent>
