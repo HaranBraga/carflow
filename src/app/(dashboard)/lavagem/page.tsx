@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, VEHICLE_CATEGORY_LABELS, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "@/lib/utils";
 
-type ModalType = "avaria" | "oportunidade" | null;
+type ModalType = "avaria" | "oportunidade" | "registro" | null;
 
 export default function LavagemPage() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -73,7 +73,7 @@ export default function LavagemPage() {
     setModal({ type, orderId });
     setAvariaNotes("");
     setSelectedOpportunities([]);
-    if (type === "oportunidade") {
+    if (type === "oportunidade" || type === "registro") {
       const res = await fetch("/api/servicos");
       if (res.ok) setAvailableServices(await res.json());
     }
@@ -111,21 +111,21 @@ export default function LavagemPage() {
     if (!modal) return;
     setModalSaving(true);
 
+    const cat = getOrderCategory(modal.orderId);
     const body: any = {};
-    if (modal.type === "avaria") {
-      if (!avariaNotes.trim()) { setModalSaving(false); return; }
+
+    if ((modal.type === "avaria" || modal.type === "registro") && avariaNotes.trim()) {
       body.addChecklist = { area: "Avaria", notes: avariaNotes.trim() };
-    } else {
-      if (selectedOpportunities.length === 0) { setModalSaving(false); return; }
-      const cat = getOrderCategory(modal.orderId);
+    }
+
+    if ((modal.type === "oportunidade" || modal.type === "registro") && selectedOpportunities.length > 0) {
       body.addOpportunities = selectedOpportunities.map((sid) => {
         const svc = availableServices.find((s) => s.id === sid);
-        return {
-          description: svc?.name ?? sid,
-          estimatedValue: svc ? priceForService(svc, cat) : undefined,
-        };
+        return { description: svc?.name ?? sid, estimatedValue: svc ? priceForService(svc, cat) : undefined };
       });
     }
+
+    if (Object.keys(body).length === 0) { setModalSaving(false); return; }
 
     await fetch(`/api/ordens/${modal.orderId}`, {
       method: "PATCH",
@@ -238,63 +238,82 @@ export default function LavagemPage() {
         </Dialog>
       )}
 
-      {/* Modal oportunidade — lista de serviços */}
-      {modal?.type === "oportunidade" && (
+      {/* Modal unificado: registro, oportunidade ou avaria */}
+      {(modal?.type === "registro" || modal?.type === "oportunidade" || modal?.type === "avaria") && (
         <Dialog open onOpenChange={(o) => { if (!o) setModal(null); }}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-yellow-500" /> Oportunidades de Serviço
+                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                <Lightbulb className="w-4 h-4 text-yellow-500" />
+                Avaria / Oportunidade
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">Selecione os serviços a oferecer ao cliente</p>
+            <div className="space-y-4">
+              {/* Avaria */}
+              {(modal.type === "avaria" || modal.type === "registro") && (
+                <div>
+                  <Label className="flex items-center gap-1 mb-1">
+                    <AlertTriangle className="w-3 h-3 text-orange-500" /> Avaria
+                    <span className="text-muted-foreground text-xs font-normal">(opcional)</span>
+                  </Label>
+                  <Textarea
+                    value={avariaNotes}
+                    onChange={(e) => setAvariaNotes(e.target.value)}
+                    placeholder="Descreva a avaria encontrada..."
+                    rows={2}
+                    autoFocus={modal.type === "avaria"}
+                  />
+                </div>
+              )}
 
-              {/* Dropdown de serviços */}
-              <Select value="" onValueChange={addOpportunity}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Adicionar serviço..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableServices
-                    .filter((svc) => serviceAppliesToCategory(svc, getOrderCategory(modal.orderId)))
-                    .filter((svc) => !selectedOpportunities.includes(svc.id))
-                    .map((svc) => {
-                      const cat = getOrderCategory(modal.orderId);
-                      return (
-                        <SelectItem key={svc.id} value={svc.id}>
-                          {svc.name} — {formatCurrency(priceForService(svc, cat))}
-                        </SelectItem>
-                      );
-                    })}
-                </SelectContent>
-              </Select>
-
-              {/* Selecionados */}
-              {selectedOpportunities.length > 0 && (
-                <div className="space-y-1">
-                  {selectedOpportunities.map((sid) => {
-                    const svc = availableServices.find((s) => s.id === sid);
-                    const cat = getOrderCategory(modal.orderId);
-                    return (
-                      <div key={sid} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium">{svc?.name}</p>
-                          <p className="text-xs text-muted-foreground">{formatCurrency(priceForService(svc, cat))}</p>
-                        </div>
-                        <button onClick={() => removeOpportunity(sid)} className="text-destructive hover:opacity-70">
-                          <span className="text-lg leading-none">×</span>
-                        </button>
-                      </div>
-                    );
-                  })}
+              {/* Oportunidades */}
+              {(modal.type === "oportunidade" || modal.type === "registro") && (
+                <div>
+                  <Label className="flex items-center gap-1 mb-1">
+                    <Lightbulb className="w-3 h-3 text-yellow-500" /> Oportunidades
+                    <span className="text-muted-foreground text-xs font-normal">(opcional)</span>
+                  </Label>
+                  <Select value="" onValueChange={addOpportunity}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Adicionar serviço..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableServices
+                        .filter((svc) => serviceAppliesToCategory(svc, getOrderCategory(modal.orderId)))
+                        .filter((svc) => !selectedOpportunities.includes(svc.id))
+                        .map((svc) => {
+                          const cat = getOrderCategory(modal.orderId);
+                          return (
+                            <SelectItem key={svc.id} value={svc.id}>
+                              {svc.name} — {formatCurrency(priceForService(svc, cat))}
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
+                  {selectedOpportunities.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {selectedOpportunities.map((sid) => {
+                        const svc = availableServices.find((s) => s.id === sid);
+                        const cat = getOrderCategory(modal.orderId);
+                        return (
+                          <div key={sid} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded px-3 py-1.5">
+                            <span className="text-sm">{svc?.name} — {formatCurrency(priceForService(svc, cat))}</span>
+                            <button onClick={() => removeOpportunity(sid)} className="text-destructive ml-2">×</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setModal(null)} disabled={modalSaving}>Cancelar</Button>
-                <Button className="flex-1" onClick={saveModal} disabled={modalSaving || selectedOpportunities.length === 0}>
-                  {modalSaving ? "Salvando..." : `Salvar${selectedOpportunities.length > 0 ? ` (${selectedOpportunities.length})` : ""}`}
+                <Button className="flex-1" onClick={saveModal}
+                  disabled={modalSaving || (!avariaNotes.trim() && selectedOpportunities.length === 0)}>
+                  {modalSaving ? "Salvando..." : "Salvar"}
                 </Button>
               </div>
             </div>
@@ -366,13 +385,11 @@ function OrderCard({ order, onStatusChange, onFinishAndSend, onModal, sending }:
               </Button>
             </>
           )}
-          <Button size="sm" variant="outline" className="gap-1 border-orange-300 text-orange-600 hover:bg-orange-50"
-            onClick={() => onModal("avaria")}>
-            <AlertTriangle className="w-3 h-3" /> Avaria
-          </Button>
-          <Button size="sm" variant="outline" className="gap-1 border-yellow-300 text-yellow-700 hover:bg-yellow-50"
-            onClick={() => onModal("oportunidade")}>
-            <Lightbulb className="w-3 h-3" /> Oportunidade
+          <Button size="sm" variant="outline" className="gap-1"
+            onClick={() => onModal("registro")}>
+            <AlertTriangle className="w-3 h-3 text-orange-500" />
+            <Lightbulb className="w-3 h-3 text-yellow-500" />
+            Avaria / Oportunidade
           </Button>
           {order.status === "FINISHED" && (
             <div className="flex items-center gap-2 w-full flex-wrap">

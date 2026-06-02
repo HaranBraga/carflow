@@ -236,9 +236,10 @@ export default function ServicosPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="categorias" className="mt-4 space-y-4">
+        <TabsContent value="categorias" className="mt-4 space-y-6">
           <CategoriaServicos categories={categories} onRefresh={fetchServices} />
-          <p className="text-sm font-medium text-muted-foreground mt-6 mb-2">Visão por tipo de veículo</p>
+          <TiposDeVeiculo servicesByCategory={servicesByCategory} />
+          <p className="text-sm font-medium text-muted-foreground mb-2">Serviços por tipo de veículo</p>
           <div className="grid md:grid-cols-2 gap-3">
             {servicesByCategory.map(({ category, services: applicable }) => (
               <Card key={category}>
@@ -318,20 +319,13 @@ export default function ServicosPage() {
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição do serviço" />
             </div>
 
-            <label className="flex items-start gap-3 cursor-pointer bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={form.isOpportunityOnly}
                 onChange={(e) => setForm({ ...form, isOpportunityOnly: e.target.checked })}
-                className="mt-0.5"
               />
-              <div>
-                <p className="text-sm font-medium">Apenas oportunidade (não é serviço imediato)</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Aparece somente na lista de oportunidades a oferecer, não nos serviços do atendimento.
-                  Ex: Cristalização, Polimento, Higienização completa.
-                </p>
-              </div>
+              <span className="text-sm font-medium">Apenas oportunidade</span>
             </label>
 
             <div className="border-t pt-4 space-y-3">
@@ -493,6 +487,72 @@ function CategoriaServicos({ categories, onRefresh }: { categories: { id: string
           </div>
         ))}
         {categories.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma categoria ainda.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TiposDeVeiculo({ servicesByCategory }: { servicesByCategory: { category: string; services: any[] }[] }) {
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/categorias-veiculo")
+      .then((r) => r.json())
+      .then((data: { category: string; label: string }[]) => {
+        const map: Record<string, string> = {};
+        data.forEach((d) => { map[d.category] = d.label; });
+        setLabels(map);
+      });
+  }, []);
+
+  async function save(category: string) {
+    setSaving(true);
+    await fetch("/api/categorias-veiculo", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([{ category, label: editValue }]),
+    });
+    setLabels((prev) => ({ ...prev, [category]: editValue }));
+    setEditing(null);
+    setSaving(false);
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Tag className="w-4 h-4" /> Tipos de Veículo
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Edite os nomes exibidos para cada tipo de veículo</p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {servicesByCategory.map(({ category }) => (
+          <div key={category} className="flex items-center gap-2">
+            {editing === category ? (
+              <>
+                <input
+                  className="flex-1 border rounded-md px-3 py-1.5 text-sm bg-background"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  autoFocus
+                />
+                <Button size="sm" onClick={() => save(category)} disabled={saving}>Salvar</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancelar</Button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-sm">{labels[category] || category}</span>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                  onClick={() => { setEditing(category); setEditValue(labels[category] || category); }}>
+                  <Pencil className="w-3 h-3" />
+                </Button>
+              </>
+            )}
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

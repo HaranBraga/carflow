@@ -71,6 +71,13 @@ model ServiceCategory {
   @@map("service_categories")
 }
 
+model VehicleCategoryLabel {
+  category String @id
+  label    String
+
+  @@map("vehicle_category_labels")
+}
+
 enum PricingType {
   FIXED
   PER_M2
