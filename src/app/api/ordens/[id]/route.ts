@@ -42,6 +42,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
   }
 
+  // Múltiplas oportunidades de uma vez
+  const addOpportunities = body.addOpportunities;
+  if (Array.isArray(addOpportunities) && addOpportunities.length > 0) {
+    await prisma.opportunity.createMany({
+      data: addOpportunities.map((o: any) => ({
+        orderId: id,
+        description: o.description,
+        estimatedValue: o.estimatedValue || null,
+      })),
+    });
+  }
+
   const updated = await prisma.serviceOrder.update({
     where: { id },
     data: updateData,

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, VEHICLE_CATEGORY_LABELS, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "@/lib/utils";
 
 type ModalType = "avaria" | "oportunidade" | null;
@@ -19,7 +20,9 @@ export default function LavagemPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState<string | null>(null);
   const [modal, setModal] = useState<{ type: ModalType; orderId: string } | null>(null);
-  const [modalForm, setModalForm] = useState({ text: "", value: "" });
+  const [avariaNotes, setAvariaNotes] = useState("");
+  const [availableServices, setAvailableServices] = useState<any[]>([]);
+  const [selectedOpportunities, setSelectedOpportunities] = useState<string[]>([]);
   const [modalSaving, setModalSaving] = useState(false);
 
   const fetchOrders = useCallback(async () => {
@@ -66,18 +69,61 @@ export default function LavagemPage() {
     fetchOrders();
   }
 
+  async function openModal(type: ModalType, orderId: string) {
+    setModal({ type, orderId });
+    setAvariaNotes("");
+    setSelectedOpportunities([]);
+    if (type === "oportunidade") {
+      const res = await fetch("/api/servicos");
+      if (res.ok) setAvailableServices(await res.json());
+    }
+  }
+
+  function addOpportunity(serviceId: string) {
+    if (!serviceId || selectedOpportunities.includes(serviceId)) return;
+    setSelectedOpportunities([...selectedOpportunities, serviceId]);
+  }
+
+  function removeOpportunity(serviceId: string) {
+    setSelectedOpportunities(selectedOpportunities.filter((id) => id !== serviceId));
+  }
+
+  function getOrderCategory(orderId: string): string {
+    return orders.find((o) => o.id === orderId)?.vehicle?.category ?? "";
+  }
+
+  function serviceAppliesToCategory(svc: any, category: string): boolean {
+    if (!svc.prices || svc.prices.length === 0) return true;
+    if (!category) return true;
+    return svc.prices.some((p: any) => p.category === category);
+  }
+
+  function priceForService(svc: any, category: string): number {
+    if (category && svc.prices?.length > 0) {
+      const match = svc.prices.find((p: any) => p.category === category);
+      if (match) return Number(match.price);
+    }
+    return Number(svc.basePrice);
+  }
+
   async function saveModal() {
-    if (!modal || !modalForm.text.trim()) return;
+    if (!modal) return;
     setModalSaving(true);
 
     const body: any = {};
     if (modal.type === "avaria") {
-      body.addChecklist = { area: "Avaria", notes: modalForm.text.trim() };
+      if (!avariaNotes.trim()) { setModalSaving(false); return; }
+      body.addChecklist = { area: "Avaria", notes: avariaNotes.trim() };
     } else {
-      body.addOpportunity = {
-        description: modalForm.text.trim(),
-        estimatedValue: modalForm.value ? parseFloat(modalForm.value) : undefined,
-      };
+      if (selectedOpportunities.length === 0) { setModalSaving(false); return; }
+      const cat = getOrderCategory(modal.orderId);
+      body.addOpportunities = selectedOpportunities.map((sid) => {
+        const svc = availableServices.find((s) => s.id === sid);
+        return {
+          description: svc?.name ?? sid,
+          estimatedValue: svc ? priceForService(svc, cat) : undefined,
+        };
+      });
     }
 
     await fetch(`/api/ordens/${modal.orderId}`, {
@@ -88,7 +134,6 @@ export default function LavagemPage() {
 
     setModalSaving(false);
     setModal(null);
-    setModalForm({ text: "", value: "" });
     fetchOrders();
   }
 
@@ -133,7 +178,7 @@ export default function LavagemPage() {
                   key={order.id} order={order}
                   onStatusChange={updateStatus}
                   onFinishAndSend={finishAndSend}
-                  onModal={(type: ModalType) => { setModal({ type, orderId: order.id }); setModalForm({ text: "", value: "" }); }}
+                  onModal={(type: ModalType) => openModal(type, order.id)}
                   sending={sending === order.id}
                 />
               ))}
@@ -151,7 +196,7 @@ export default function LavagemPage() {
                   key={order.id} order={order}
                   onStatusChange={updateStatus}
                   onFinishAndSend={finishAndSend}
-                  onModal={(type: ModalType) => { setModal({ type, orderId: order.id }); setModalForm({ text: "", value: "" }); }}
+                  onModal={(type: ModalType) => openModal(type, order.id)}
                   sending={sending === order.id}
                 />
               ))}
@@ -161,49 +206,100 @@ export default function LavagemPage() {
         </div>
       )}
 
-      {/* Modal avaria/oportunidade */}
-      <Dialog open={!!modal} onOpenChange={(o) => { if (!o) setModal(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {modal?.type === "avaria"
-                ? <><AlertTriangle className="w-4 h-4 text-orange-500" /> Registrar Avaria</>
-                : <><Lightbulb className="w-4 h-4 text-yellow-500" /> Adicionar Oportunidade</>}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>{modal?.type === "avaria" ? "Descrição da avaria" : "Serviço a oferecer"}</Label>
-              <Textarea
-                value={modalForm.text}
-                onChange={(e) => setModalForm({ ...modalForm, text: e.target.value })}
-                placeholder={modal?.type === "avaria" ? "Ex: Arranhão no para-choque..." : "Ex: Polimento lateral..."}
-                rows={3}
-                autoFocus
-              />
-            </div>
-            {modal?.type === "oportunidade" && (
+      {/* Modal avaria */}
+      {modal?.type === "avaria" && (
+        <Dialog open onOpenChange={(o) => { if (!o) setModal(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-orange-500" /> Registrar Avaria
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
               <div>
-                <Label>Valor estimado (R$) <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={modalForm.value}
-                  onChange={(e) => setModalForm({ ...modalForm, value: e.target.value })}
-                  placeholder="0,00"
+                <Label>Descrição da avaria</Label>
+                <Textarea
+                  value={avariaNotes}
+                  onChange={(e) => setAvariaNotes(e.target.value)}
+                  placeholder="Ex: Arranhão no para-choque traseiro..."
+                  rows={3}
+                  autoFocus
                 />
               </div>
-            )}
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setModal(null)} disabled={modalSaving}>Cancelar</Button>
-              <Button className="flex-1" onClick={saveModal} disabled={modalSaving || !modalForm.text.trim()}>
-                {modalSaving ? "Salvando..." : "Salvar"}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setModal(null)} disabled={modalSaving}>Cancelar</Button>
+                <Button className="flex-1" onClick={saveModal} disabled={modalSaving || !avariaNotes.trim()}>
+                  {modalSaving ? "Salvando..." : "Salvar"}
+                </Button>
+              </div>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal oportunidade — lista de serviços */}
+      {modal?.type === "oportunidade" && (
+        <Dialog open onOpenChange={(o) => { if (!o) setModal(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-yellow-500" /> Oportunidades de Serviço
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Selecione os serviços a oferecer ao cliente</p>
+
+              {/* Dropdown de serviços */}
+              <Select value="" onValueChange={addOpportunity}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Adicionar serviço..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableServices
+                    .filter((svc) => serviceAppliesToCategory(svc, getOrderCategory(modal.orderId)))
+                    .filter((svc) => !selectedOpportunities.includes(svc.id))
+                    .map((svc) => {
+                      const cat = getOrderCategory(modal.orderId);
+                      return (
+                        <SelectItem key={svc.id} value={svc.id}>
+                          {svc.name} — {formatCurrency(priceForService(svc, cat))}
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+
+              {/* Selecionados */}
+              {selectedOpportunities.length > 0 && (
+                <div className="space-y-1">
+                  {selectedOpportunities.map((sid) => {
+                    const svc = availableServices.find((s) => s.id === sid);
+                    const cat = getOrderCategory(modal.orderId);
+                    return (
+                      <div key={sid} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium">{svc?.name}</p>
+                          <p className="text-xs text-muted-foreground">{formatCurrency(priceForService(svc, cat))}</p>
+                        </div>
+                        <button onClick={() => removeOpportunity(sid)} className="text-destructive hover:opacity-70">
+                          <span className="text-lg leading-none">×</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setModal(null)} disabled={modalSaving}>Cancelar</Button>
+                <Button className="flex-1" onClick={saveModal} disabled={modalSaving || selectedOpportunities.length === 0}>
+                  {modalSaving ? "Salvando..." : `Salvar${selectedOpportunities.length > 0 ? ` (${selectedOpportunities.length})` : ""}`}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
