@@ -27,8 +27,16 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "20");
 
+  const normalizedSearch = normalizePhone(search);
   const where = search
-    ? { name: { contains: search, mode: "insensitive" as const } }
+    ? {
+        OR: [
+          { name: { contains: search, mode: "insensitive" as const } },
+          ...(normalizedSearch.length >= 8
+            ? [{ phone: { contains: normalizedSearch } }]
+            : []),
+        ],
+      }
     : {};
 
   const [customers, total] = await Promise.all([
