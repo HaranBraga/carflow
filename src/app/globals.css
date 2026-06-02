@@ -3,9 +3,12 @@
 @tailwind utilities;
 
 /* PWA / Mobile */
-html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
-@supports (-webkit-overflow-scrolling: touch) { input, select, textarea { font-size: 16px; } }
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+/* iOS Safari zooms in when focused input has font-size < 16px — apply universally */
+input, select, textarea { font-size: 16px; }
 body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 
 @layer base {
   :root {

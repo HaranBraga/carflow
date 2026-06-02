@@ -75,11 +75,11 @@ export default function EntradaPage() {
     setSuccessInfo(null);
   }
 
-  // Auto-busca por telefone quando número tem 10-11 dígitos
+  // Auto-busca por telefone quando número tem 11 dígitos (DDD + 9 + número)
   useEffect(() => {
     if (existingVehicle || customer.id) return;
     const digits = customer.phone.replace(/\D/g, "");
-    if (digits.length < 10) return;
+    if (digits.length < 11) return;
     const timer = setTimeout(async () => {
       setPhoneSearching(true);
       try {
@@ -92,7 +92,7 @@ export default function EntradaPage() {
       } finally {
         setPhoneSearching(false);
       }
-    }, 500);
+    }, 600);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer.phone]);
@@ -290,18 +290,18 @@ export default function EntradaPage() {
   ];
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-4">
       <div className="flex items-center gap-3">
-        <Car className="w-6 h-6 text-primary" />
-        <h1 className="text-2xl font-bold">Entrada de Veículo</h1>
+        <Car className="w-5 h-5 text-primary" />
+        <h1 className="text-xl font-bold">Entrada de Veículo</h1>
       </div>
 
-      <div className="flex items-center gap-2 text-xs overflow-x-auto pb-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
         {steps.map(({ key, label }, i, arr) => (
-          <div key={key} className="flex items-center gap-2 shrink-0">
-            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${step === key ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>{i + 1}</span>
-            <span className={step === key ? "font-medium text-foreground" : "text-muted-foreground"}>{label}</span>
-            {i < arr.length - 1 && <span className="text-muted-foreground">→</span>}
+          <div key={key} className="flex items-center gap-1.5 shrink-0">
+            <span className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${step === key ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>{i + 1}</span>
+            <span className={`text-xs ${step === key ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{label}</span>
+            {i < arr.length - 1 && <span className="text-muted-foreground text-xs">›</span>}
           </div>
         ))}
       </div>
@@ -365,7 +365,7 @@ export default function EntradaPage() {
             )}
 
             <Button
-              className="w-full"
+              className="w-full h-12 text-base"
               onClick={() => goToStep("cliente")}
               disabled={searching || plateInput.replace(/[^A-Z0-9]/gi, "").length < 7 || (!existingVehicle && !vehicle.category)}
             >
@@ -395,10 +395,9 @@ export default function EntradaPage() {
                     <Input
                       value={customer.phone}
                       onChange={(e) => setCustomer({ name: "", phone: e.target.value.replace(/\D/g, ""), gender: customer.gender, isUber: customer.isUber })}
-                      placeholder="68999551835"
+                      placeholder="DDD + número"
                       type="tel"
                       inputMode="numeric"
-                      autoFocus
                       className="pr-8"
                     />
                     {phoneSearching && (
@@ -407,7 +406,7 @@ export default function EntradaPage() {
                   </div>
                 </div>
 
-                {customer.phone.replace(/\D/g, "").length >= 10 && (
+                {customer.phone.replace(/\D/g, "").length >= 11 && (
                   <>
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -424,7 +423,6 @@ export default function EntradaPage() {
                         placeholder={phoneSearching ? "Buscando..." : "Nome do cliente"}
                         readOnly={!!customer.id}
                         className={customer.id ? "bg-green-50 border-green-300 text-green-900" : ""}
-                        autoFocus={!customer.id}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -456,8 +454,8 @@ export default function EntradaPage() {
               </div>
             )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("placa")} className="flex-1">Voltar</Button>
-              <Button onClick={() => goToStep("servicos")} className="flex-1" disabled={!customer.name || !customer.phone}>
+              <Button variant="outline" onClick={() => setStep("placa")} className="flex-1 h-12">Voltar</Button>
+              <Button onClick={() => goToStep("servicos")} className="flex-1 h-12 text-base" disabled={!customer.name || customer.phone.replace(/\D/g, "").length < 10}>
                 Próximo
               </Button>
             </div>
@@ -473,11 +471,11 @@ export default function EntradaPage() {
             <p className="text-xs text-muted-foreground">
               Preços para <strong>{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</strong>
             </p>
-            <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
               {availableServices.filter((s) => serviceAppliesToCategory(s, false)).map((svc) => (
                 <button key={svc.id} onClick={() => addService(svc)}
-                  className={`text-left p-2 rounded-lg border text-sm transition-colors ${services.find((s) => s.serviceId === svc.id) ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"}`}>
-                  <p className="font-medium truncate">{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</p>
+                  className={`text-left p-3 rounded-lg border transition-colors active:scale-[0.98] ${services.find((s) => s.serviceId === svc.id) ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"}`}>
+                  <p className="font-medium text-sm">{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</p>
                   <p className="text-xs text-muted-foreground">{formatCurrency(priceForService(svc))}</p>
                 </button>
               ))}
@@ -503,8 +501,8 @@ export default function EntradaPage() {
               <Textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Informações adicionais..." rows={2} />
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("cliente")} className="flex-1">Voltar</Button>
-              <Button onClick={() => goToStep("checklist")} className="flex-1" disabled={services.length === 0}>
+              <Button variant="outline" onClick={() => setStep("cliente")} className="flex-1 h-12">Voltar</Button>
+              <Button onClick={() => goToStep("checklist")} className="flex-1 h-12 text-base" disabled={services.length === 0}>
                 {services.length === 0 ? "Selecione ao menos 1" : "Próximo"}
               </Button>
             </div>
@@ -550,8 +548,8 @@ export default function EntradaPage() {
               )}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("servicos")} className="flex-1">Voltar</Button>
-              <Button onClick={() => setStep("confirmacao")} className="flex-1">Próximo: Confirmar</Button>
+              <Button variant="outline" onClick={() => setStep("servicos")} className="flex-1 h-12">Voltar</Button>
+              <Button onClick={() => setStep("confirmacao")} className="flex-1 h-12 text-base">Próximo: Confirmar</Button>
             </div>
           </CardContent>
         </Card>
@@ -596,8 +594,8 @@ export default function EntradaPage() {
             )}
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("checklist")} className="flex-1" disabled={loading}>Voltar</Button>
-              <Button onClick={submitOrder} disabled={loading} className="flex-1" variant="success">
+              <Button variant="outline" onClick={() => setStep("checklist")} className="flex-1 h-12" disabled={loading}>Voltar</Button>
+              <Button onClick={submitOrder} disabled={loading} className="flex-1 h-12 text-base" variant="success">
                 {loading ? "Registrando..." : "Confirmar Entrada"}
               </Button>
             </div>
