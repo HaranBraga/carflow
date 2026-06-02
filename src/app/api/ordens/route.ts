@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const date = searchParams.get("date");
+  const customerId = searchParams.get("customerId");
+  const limit = parseInt(searchParams.get("limit") || "50");
 
   const where: any = {};
 
@@ -51,6 +53,10 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  if (customerId) {
+    where.vehicle = { customerId };
+  }
+
   const orders = await prisma.serviceOrder.findMany({
     where,
     include: {
@@ -61,7 +67,7 @@ export async function GET(req: NextRequest) {
       opportunities: true,
     },
     orderBy: { arrivedAt: "desc" },
-    take: 50,
+    take: limit,
   });
 
   return NextResponse.json(orders);
@@ -118,6 +124,26 @@ export async function POST(req: NextRequest) {
         orderId: order.id,
       },
     });
+  }
+
+  // Auto-realiza oportunidades pendentes cujo serviço foi executado nesta ordem
+  const serviceNames = order.items.map((item: any) => item.service.name.toLowerCase().trim());
+  if (serviceNames.length > 0) {
+    const pendingOps = await prisma.opportunity.findMany({
+      where: {
+        contacted: false,
+        order: { vehicle: { customerId: order.vehicle.customerId } },
+      },
+    });
+    const matchedIds = pendingOps
+      .filter((op) => serviceNames.includes(op.description.toLowerCase().trim()))
+      .map((op) => op.id);
+    if (matchedIds.length > 0) {
+      await prisma.opportunity.updateMany({
+        where: { id: { in: matchedIds } },
+        data: { contacted: true },
+      });
+    }
   }
 
   return NextResponse.json(order, { status: 201 });

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Users, Search, Star, TrendingUp, Car, Pencil, X, Lightbulb, Phone, CheckCircle2 } from "lucide-react";
+import { Users, Search, Star, TrendingUp, Car, Pencil, Lightbulb, Phone, Clock, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatPhone, GENDER_LABELS, VEHICLE_CATEGORY_LABELS } from "@/lib/utils";
+import { formatCurrency, formatPhone, GENDER_LABELS, VEHICLE_CATEGORY_LABELS, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "@/lib/utils";
 
 type Customer = {
   id: string;
@@ -32,6 +32,7 @@ export default function ClientesPage() {
   const [editForm, setEditForm] = useState({ name: "", phone: "", gender: "", isUber: false, notes: "" });
   const [editError, setEditError] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
 
   async function fetchCustomers(q = "") {
     setLoading(true);
@@ -119,9 +120,14 @@ export default function ClientesPage() {
                           </div>
                         )}
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)} title="Editar cliente">
-                        <Pencil className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => setHistoryCustomer(c)} title="Histórico">
+                          <Clock className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(c)} title="Editar">
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -137,6 +143,18 @@ export default function ClientesPage() {
         <TabsContent value="ranking" className="mt-4"><CRMRanking /></TabsContent>
         <TabsContent value="genero" className="mt-4"><CRMGender /></TabsContent>
       </Tabs>
+
+      {/* Modal de histórico */}
+      <Dialog open={!!historyCustomer} onOpenChange={(o) => { if (!o) setHistoryCustomer(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-4 h-4" /> Histórico — {historyCustomer?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {historyCustomer && <CustomerHistory customerId={historyCustomer.id} />}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de edição */}
       <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
@@ -274,12 +292,12 @@ function CRMGender() {
 
 function CRMOportunidades() {
   const [items, setItems] = useState<any[]>([]);
-  const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const [filter, setFilter] = useState<"pending" | "realized">("pending");
   const [loading, setLoading] = useState(true);
 
   async function load(f = filter) {
     setLoading(true);
-    const url = f === "pending" ? "/api/oportunidades?contacted=false" : "/api/oportunidades";
+    const url = f === "pending" ? "/api/oportunidades?contacted=false" : "/api/oportunidades?contacted=true";
     const res = await fetch(url);
     if (res.ok) setItems(await res.json());
     setLoading(false);
@@ -287,15 +305,6 @@ function CRMOportunidades() {
 
   useEffect(() => { load(); }, []);
   useEffect(() => { load(filter); }, [filter]);
-
-  async function markContacted(id: string, contacted: boolean) {
-    await fetch(`/api/oportunidades/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacted }),
-    });
-    load(filter);
-  }
 
   const grouped = items.reduce((acc: Record<string, any[]>, op) => {
     const key = op.order.vehicle.customer.id;
@@ -309,14 +318,14 @@ function CRMOportunidades() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Lightbulb className="w-5 h-5 text-yellow-500" />
-          <p className="font-semibold">Oportunidades a Abordar</p>
+          <p className="font-semibold">Oportunidades</p>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant={filter === "pending" ? "default" : "outline"} onClick={() => setFilter("pending")}>
             Pendentes
           </Button>
-          <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
-            Todas
+          <Button size="sm" variant={filter === "realized" ? "default" : "outline"} onClick={() => setFilter("realized")}>
+            Realizadas
           </Button>
         </div>
       </div>
@@ -326,16 +335,15 @@ function CRMOportunidades() {
       ) : Object.keys(grouped).length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Lightbulb className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p>{filter === "pending" ? "Nenhuma oportunidade pendente." : "Nenhuma oportunidade registrada."}</p>
+          <p>{filter === "pending" ? "Nenhuma oportunidade pendente." : "Nenhuma oportunidade realizada ainda."}</p>
         </div>
       ) : (
         <div className="space-y-3">
           {Object.values(grouped).map((ops) => {
             const customer = ops[0].order.vehicle.customer;
             const plate = ops[0].order.vehicle.plate;
-            const allContacted = ops.every((o) => o.contacted);
             return (
-              <Card key={customer.id} className={allContacted ? "opacity-60" : ""}>
+              <Card key={customer.id}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -346,29 +354,22 @@ function CRMOportunidades() {
                         <span className="font-mono text-xs">· {plate}</span>
                       </p>
                     </div>
-                    {allContacted && (
-                      <Badge variant="secondary" className="text-xs shrink-0">Contatado</Badge>
-                    )}
                   </div>
 
                   <div className="space-y-2">
                     {ops.map((op) => (
-                      <div key={op.id} className={`flex items-center justify-between rounded-lg px-3 py-2 ${op.contacted ? "bg-muted" : "bg-yellow-50 border border-yellow-200"}`}>
+                      <div key={op.id} className={`flex items-center justify-between rounded-lg px-3 py-2 ${op.contacted ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">{op.description}</p>
                           {op.estimatedValue && (
                             <p className="text-xs text-muted-foreground">{formatCurrency(Number(op.estimatedValue))}</p>
                           )}
                         </div>
-                        <Button
-                          size="sm"
-                          variant={op.contacted ? "ghost" : "outline"}
-                          className={`shrink-0 ml-2 gap-1 text-xs ${op.contacted ? "text-muted-foreground" : "text-green-700 border-green-300 hover:bg-green-50"}`}
-                          onClick={() => markContacted(op.id, !op.contacted)}
-                        >
-                          <CheckCircle2 className="w-3 h-3" />
-                          {op.contacted ? "Desfazer" : "Contatado"}
-                        </Button>
+                        {op.contacted && (
+                          <div className="shrink-0 ml-2 flex items-center gap-1 text-xs text-green-700 font-medium">
+                            <CheckCircle className="w-3 h-3" /> Realizado
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -378,6 +379,62 @@ function CRMOportunidades() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function CustomerHistory({ customerId }: { customerId: string }) {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/ordens?customerId=${customerId}&limit=30`)
+      .then((r) => r.json())
+      .then((data) => { setOrders(Array.isArray(data) ? data : []); setLoading(false); });
+  }, [customerId]);
+
+  if (loading) return <p className="text-center text-muted-foreground py-8">Carregando...</p>;
+  if (orders.length === 0) return (
+    <div className="text-center py-8 text-muted-foreground">
+      <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p>Nenhuma ordem encontrada.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3 mt-2">
+      {orders.map((order) => (
+        <div key={order.id} className="border rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <span className="font-mono font-bold text-sm">{order.vehicle.plate}</span>
+              <span className="text-xs text-muted-foreground ml-2">{VEHICLE_CATEGORY_LABELS[order.vehicle.category]}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ORDER_STATUS_COLORS[order.status]}`}>
+                {ORDER_STATUS_LABELS[order.status]}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {new Date(order.arrivedAt).toLocaleDateString("pt-BR")}
+              </span>
+            </div>
+          </div>
+          {order.items?.length > 0 && (
+            <div className="space-y-0.5">
+              {order.items.map((item: any) => (
+                <div key={item.id} className="flex justify-between text-xs text-muted-foreground">
+                  <span>{item.service?.name}</span>
+                  <span>{formatCurrency(Number(item.unitPrice))}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex justify-between text-sm font-semibold pt-1 border-t">
+            <span>Total</span>
+            <span>{formatCurrency(Number(order.totalAmount))}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
