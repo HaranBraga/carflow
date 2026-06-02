@@ -122,13 +122,10 @@ export default function EntradaPage() {
         setExistingVehicle(data);
         setVehicle({ id: data.id, plate: data.plate, model: data.model || "", color: data.color || "", category: data.category });
         setCustomer({ id: data.customer.id, name: data.customer.name, phone: data.customer.phone, gender: data.customer.gender, isUber: data.customer.isUber });
-        setShowPhoneSearch(false);
       } else {
         setExistingVehicle(null);
         setVehicle((v) => ({ ...v, plate: p.toUpperCase() }));
         setCustomer(initialCustomer);
-        setPhoneSearchResult(null);
-        setShowPhoneSearch(false);
       }
     } finally {
       setSearching(false);
