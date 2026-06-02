@@ -386,27 +386,15 @@ export default function EntradaPage() {
                 <p className="font-medium">{customer.name}</p>
                 <p className="text-sm text-muted-foreground">{customer.phone}</p>
               </div>
-            ) : customer.id ? (
-              /* Cliente encontrado pelo telefone */
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-green-700 font-medium">✓ Cliente encontrado</p>
-                  <p className="font-medium">{customer.name}</p>
-                  <p className="text-sm text-muted-foreground">{customer.phone}</p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setCustomer(initialCustomer)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
             ) : (
-              /* Novo cliente — telefone primeiro, depois nome */
+              /* Formulário sempre visível — telefone primeiro, nome depois */
               <div className="space-y-3">
-                <div className="relative">
+                <div>
                   <Label>Telefone / WhatsApp *</Label>
                   <div className="relative mt-1">
                     <Input
                       value={customer.phone}
-                      onChange={(e) => setCustomer({ ...customer, phone: e.target.value.replace(/\D/g, "") })}
+                      onChange={(e) => setCustomer({ name: "", phone: e.target.value.replace(/\D/g, ""), gender: customer.gender, isUber: customer.isUber })}
                       placeholder="68999551835"
                       type="tel"
                       inputMode="numeric"
@@ -417,17 +405,26 @@ export default function EntradaPage() {
                       <Loader2 className="absolute right-3 top-3 w-4 h-4 animate-spin text-muted-foreground" />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Digite os dígitos — busca automática ao completar</p>
                 </div>
+
                 {customer.phone.replace(/\D/g, "").length >= 10 && (
                   <>
                     <div>
-                      <Label>Nome *</Label>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label>Nome *</Label>
+                        {customer.id && (
+                          <span className="text-xs text-green-700 font-medium flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Cliente encontrado
+                          </span>
+                        )}
+                      </div>
                       <Input
                         value={customer.name}
-                        onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                        placeholder="Nome do cliente"
-                        autoFocus
+                        onChange={(e) => !customer.id && setCustomer({ ...customer, name: e.target.value })}
+                        placeholder={phoneSearching ? "Buscando..." : "Nome do cliente"}
+                        readOnly={!!customer.id}
+                        className={customer.id ? "bg-green-50 border-green-300 text-green-900" : ""}
+                        autoFocus={!customer.id}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -461,7 +458,7 @@ export default function EntradaPage() {
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("placa")} className="flex-1">Voltar</Button>
               <Button onClick={() => goToStep("servicos")} className="flex-1" disabled={!customer.name || !customer.phone}>
-                Próximo: Serviços
+                Próximo
               </Button>
             </div>
           </CardContent>
