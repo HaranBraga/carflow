@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState, useEffect } from "react";
-import { Search, Car, User, CheckCircle, Lightbulb, X, Loader2 } from "lucide-react";
+import { Car, User, CheckCircle, Lightbulb, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,11 +58,7 @@ export default function EntradaPage() {
   const [opportunities, setOpportunities] = useState<string[]>([]);
   const [orderNotes, setOrderNotes] = useState("");
 
-  // Busca de cliente por telefone (quando placa não existe)
-  const [phoneSearch, setPhoneSearch] = useState("");
-  const [phoneSearchResult, setPhoneSearchResult] = useState<any>(null);
   const [phoneSearching, setPhoneSearching] = useState(false);
-  const [showPhoneSearch, setShowPhoneSearch] = useState(false);
 
   function reset() {
     submittingRef.current = false;
@@ -77,10 +73,29 @@ export default function EntradaPage() {
     setOrderNotes("");
     setError("");
     setSuccessInfo(null);
-    setPhoneSearch("");
-    setPhoneSearchResult(null);
-    setShowPhoneSearch(false);
   }
+
+  // Auto-busca por telefone quando número tem 10-11 dígitos
+  useEffect(() => {
+    if (existingVehicle || customer.id) return;
+    const digits = customer.phone.replace(/\D/g, "");
+    if (digits.length < 10) return;
+    const timer = setTimeout(async () => {
+      setPhoneSearching(true);
+      try {
+        const res = await fetch(`/api/clientes?search=${digits}&limit=1`);
+        const data = await res.json();
+        const found = data.customers?.[0];
+        if (found) {
+          setCustomer({ id: found.id, name: found.name, phone: found.phone, gender: found.gender, isUber: found.isUber });
+        }
+      } finally {
+        setPhoneSearching(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer.phone]);
 
   // Auto-busca quando placa tem 7+ caracteres
   useEffect(() => {
@@ -120,21 +135,6 @@ export default function EntradaPage() {
     }
   }
 
-  async function searchByPhone() {
-    if (phoneSearch.replace(/\D/g, "").length < 8) return;
-    setPhoneSearching(true);
-    try {
-      const res = await fetch(`/api/clientes?search=${phoneSearch.replace(/\D/g, "")}&limit=1`);
-      const data = await res.json();
-      const found = data.customers?.[0];
-      setPhoneSearchResult(found || null);
-      if (found) {
-        setCustomer({ id: found.id, name: found.name, phone: found.phone, gender: found.gender, isUber: found.isUber });
-      }
-    } finally {
-      setPhoneSearching(false);
-    }
-  }
 
   async function loadServices() {
     const res = await fetch("/api/servicos");
@@ -384,66 +384,54 @@ export default function EntradaPage() {
           <CardHeader><CardTitle className="flex items-center gap-2"><User className="w-5 h-5" />Dados do Cliente</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {existingVehicle ? (
-              <div className="bg-blue-50 rounded-lg p-3 space-y-1">
+              /* Veículo já cadastrado — cliente conhecido */
+              <div className="bg-blue-50 rounded-lg p-3 space-y-0.5">
                 <p className="font-medium">{customer.name}</p>
-                <p className="text-sm text-muted-foreground">{formatPhone(customer.phone)}</p>
+                <p className="text-sm text-muted-foreground">{customer.phone}</p>
+              </div>
+            ) : customer.id ? (
+              /* Cliente encontrado pelo telefone */
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-green-700 font-medium">✓ Cliente encontrado</p>
+                  <p className="font-medium">{customer.name}</p>
+                  <p className="text-sm text-muted-foreground">{customer.phone}</p>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setCustomer(initialCustomer)}>
+                  <X className="w-4 h-4" />
+                </Button>
               </div>
             ) : (
-              <div className="space-y-4">
-                {/* Buscar cliente existente por telefone */}
-                {!customer.id && (
-                  <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
-                    <p className="text-sm font-medium">Cliente já tem cadastro? Busque pelo telefone:</p>
-                    <div className="flex gap-2">
-                      <Input
-                        value={phoneSearch}
-                        onChange={(e) => setPhoneSearch(e.target.value)}
-                        placeholder="(11) 99999-0000"
-                        type="tel"
-                        className="flex-1"
-                      />
-                      <Button type="button" variant="outline" onClick={searchByPhone} disabled={phoneSearching}>
-                        {phoneSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                    {phoneSearchResult && (
-                      <div className="bg-green-50 border border-green-200 rounded p-2 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium">{phoneSearchResult.name}</p>
-                          <p className="text-xs text-muted-foreground">{formatPhone(phoneSearchResult.phone)}</p>
-                        </div>
-                        <Button size="sm" onClick={() => {
-                          setCustomer({ id: phoneSearchResult.id, name: phoneSearchResult.name, phone: phoneSearchResult.phone, gender: phoneSearchResult.gender, isUber: phoneSearchResult.isUber });
-                        }}>Usar</Button>
-                      </div>
-                    )}
-                    {phoneSearch && !phoneSearching && phoneSearchResult === null && (
-                      <p className="text-xs text-muted-foreground">Nenhum cliente encontrado com esse telefone.</p>
+              /* Novo cliente — telefone primeiro, depois nome */
+              <div className="space-y-3">
+                <div className="relative">
+                  <Label>Telefone / WhatsApp *</Label>
+                  <div className="relative mt-1">
+                    <Input
+                      value={customer.phone}
+                      onChange={(e) => setCustomer({ ...customer, phone: e.target.value.replace(/\D/g, "") })}
+                      placeholder="68999551835"
+                      type="tel"
+                      inputMode="numeric"
+                      autoFocus
+                      className="pr-8"
+                    />
+                    {phoneSearching && (
+                      <Loader2 className="absolute right-3 top-3 w-4 h-4 animate-spin text-muted-foreground" />
                     )}
                   </div>
-                )}
-
-                {/* Formulário novo cliente ou cliente selecionado */}
-                {customer.id ? (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{customer.name}</p>
-                      <p className="text-sm text-muted-foreground">{formatPhone(customer.phone)}</p>
-                    </div>
-                    <Button size="sm" variant="ghost" onClick={() => setCustomer(initialCustomer)}>
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground font-medium">— ou cadastre um novo cliente —</p>
+                  <p className="text-xs text-muted-foreground mt-1">Digite os dígitos — busca automática ao completar</p>
+                </div>
+                {customer.phone.replace(/\D/g, "").length >= 10 && (
+                  <>
                     <div>
                       <Label>Nome *</Label>
-                      <Input value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Nome do cliente" />
-                    </div>
-                    <div>
-                      <Label>Telefone / WhatsApp *</Label>
-                      <Input value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="(11) 99999-0000" type="tel" />
+                      <Input
+                        value={customer.name}
+                        onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                        placeholder="Nome do cliente"
+                        autoFocus
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -469,7 +457,7 @@ export default function EntradaPage() {
                         </Select>
                       </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             )}
