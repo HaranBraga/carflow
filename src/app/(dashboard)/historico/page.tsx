@@ -10,7 +10,7 @@ import { ptBR } from "date-fns/locale";
 export default function HistoricoPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD no fuso local
 
   useEffect(() => {
     fetch(`/api/historico?date=${today}`)

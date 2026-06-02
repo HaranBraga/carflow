@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantPrisma } from "@/lib/prisma-tenant";
-import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(req: NextRequest) {
   let prisma;
@@ -11,13 +10,17 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const dateStr = searchParams.get("date") || new Date().toISOString().split("T")[0];
-  const date = new Date(dateStr);
+  const dateStr = searchParams.get("date") || new Date().toLocaleDateString("en-CA");
+
+  // Parseia como meia-noite LOCAL (America/Sao_Paulo) para evitar deslocamento UTC
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end   = new Date(year, month - 1, day, 23, 59, 59, 999);
 
   const orders = await prisma.serviceOrder.findMany({
     where: {
       status: { in: ["FINISHED", "DELIVERED"] },
-      finishedAt: { gte: startOfDay(date), lte: endOfDay(date) },
+      finishedAt: { gte: start, lte: end },
     },
     include: {
       vehicle: { include: { customer: true } },

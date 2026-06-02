@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <g fill="white">
+    <!-- Carro estilizado -->
+    <rect x="96" y="280" width="320" height="80" rx="20"/>
+    <path d="M140 280 L180 190 Q190 170 210 170 L302 170 Q322 170 332 190 L372 280 Z"/>
+    <circle cx="160" cy="360" r="48" fill="#1d4ed8"/>
+    <circle cx="160" cy="360" r="30" fill="white"/>
+    <circle cx="352" cy="360" r="48" fill="#1d4ed8"/>
+    <circle cx="352" cy="360" r="30" fill="white"/>
+    <!-- Bolhas de limpeza -->
+    <circle cx="380" cy="150" r="22" opacity="0.8"/>
+    <circle cx="420" cy="120" r="15" opacity="0.6"/>
+    <circle cx="355" cy="125" r="12" opacity="0.7"/>
+  </g>
+</svg>
