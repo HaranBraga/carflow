@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Wrench, Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { Wrench, Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, VEHICLE_CATEGORY_LABELS } from "@/lib/utils";
@@ -19,6 +19,8 @@ type ServiceData = {
   name: string;
   description: string | null;
   basePrice: number;
+  pricingType: string;
+  isOpportunityOnly: boolean;
   active: boolean;
   prices: { id: string; category: string; price: number }[];
 };
@@ -27,7 +29,6 @@ const emptyForm = {
   name: "",
   description: "",
   basePrice: "",
-  categoryId: "",
   pricingType: "FIXED" as "FIXED" | "PER_M2",
   isOpportunityOnly: false,
   prices: VEHICLE_CATEGORIES.map((c) => ({ category: c, price: "", enabled: false })) as CategoryPrice[],
@@ -36,7 +37,6 @@ const emptyForm = {
 
 export default function ServicosPage() {
   const [services, setServices] = useState<ServiceData[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -45,12 +45,8 @@ export default function ServicosPage() {
   const [error, setError] = useState("");
 
   async function fetchServices() {
-    const [svcRes, catRes] = await Promise.all([
-      fetch("/api/servicos"),
-      fetch("/api/categorias-servico"),
-    ]);
-    setServices(await svcRes.json());
-    if (catRes.ok) setCategories(await catRes.json());
+    const res = await fetch("/api/servicos");
+    setServices(await res.json());
     setLoading(false);
   }
 
@@ -63,16 +59,15 @@ export default function ServicosPage() {
     setDialogOpen(true);
   }
 
-  function openEdit(svc: ServiceData & { categoryId?: string; pricingType?: string }) {
+  function openEdit(svc: ServiceData) {
     const priceByCat: Record<string, number> = {};
     svc.prices.forEach((p) => { priceByCat[p.category] = Number(p.price); });
     setForm({
       name: svc.name,
       description: svc.description ?? "",
       basePrice: String(svc.basePrice),
-      categoryId: svc.categoryId ?? "",
       pricingType: (svc.pricingType as "FIXED" | "PER_M2") ?? "FIXED",
-      isOpportunityOnly: (svc as any).isOpportunityOnly ?? false,
+      isOpportunityOnly: svc.isOpportunityOnly ?? false,
       prices: VEHICLE_CATEGORIES.map((c) => ({
         category: c,
         price: priceByCat[c] !== undefined ? String(priceByCat[c]) : "",
@@ -95,10 +90,7 @@ export default function ServicosPage() {
   }
 
   function setCategoryPrice(cat: string, price: string) {
-    setForm({
-      ...form,
-      prices: form.prices.map((p) => p.category === cat ? { ...p, price } : p),
-    });
+    setForm({ ...form, prices: form.prices.map((p) => p.category === cat ? { ...p, price } : p) });
   }
 
   async function save(e: React.FormEvent) {
@@ -124,7 +116,6 @@ export default function ServicosPage() {
       description: form.description || undefined,
       basePrice,
       pricingType: form.pricingType,
-      categoryId: form.categoryId || null,
       isOpportunityOnly: form.isOpportunityOnly,
       prices,
     };
@@ -160,13 +151,6 @@ export default function ServicosPage() {
     fetchServices();
   }
 
-  const servicesByCategory = VEHICLE_CATEGORIES.map((cat) => {
-    const applicable = services.filter((s) =>
-      s.prices.length === 0 || s.prices.some((p) => p.category === cat)
-    );
-    return { category: cat, services: applicable };
-  });
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -180,7 +164,7 @@ export default function ServicosPage() {
       <Tabs defaultValue="servicos">
         <TabsList>
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
-          <TabsTrigger value="categorias">Categorias</TabsTrigger>
+          <TabsTrigger value="tipos">Tipos de Veículo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="servicos" className="mt-4">
@@ -200,13 +184,13 @@ export default function ServicosPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold">{s.name}</p>
-                          {(s as any).isOpportunityOnly && (
+                          {s.isOpportunityOnly && (
                             <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 text-xs">Só oportunidade</Badge>
                           )}
                           {s.prices.length === 0 ? (
                             <Badge variant="secondary">Preço único: {formatCurrency(Number(s.basePrice))}</Badge>
                           ) : (
-                            <Badge variant="outline">{s.prices.length} categoria(s)</Badge>
+                            <Badge variant="outline">{s.prices.length} tipo(s)</Badge>
                           )}
                         </div>
                         {s.description && <p className="text-sm text-muted-foreground mt-0.5">{s.description}</p>}
@@ -236,41 +220,8 @@ export default function ServicosPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="categorias" className="mt-4 space-y-6">
-          <CategoriaServicos categories={categories} onRefresh={fetchServices} />
-          <TiposDeVeiculo servicesByCategory={servicesByCategory} />
-          <p className="text-sm font-medium text-muted-foreground mb-2">Serviços por tipo de veículo</p>
-          <div className="grid md:grid-cols-2 gap-3">
-            {servicesByCategory.map(({ category, services: applicable }) => (
-              <Card key={category}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Tag className="w-4 h-4" />
-                    {VEHICLE_CATEGORY_LABELS[category]}
-                    <Badge variant="secondary" className="ml-auto">{applicable.length}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {applicable.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Nenhum serviço aplicável</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {applicable.map((svc: any) => {
-                        const catPrice = svc.prices.find((p: any) => p.category === category);
-                        const price = catPrice ? Number(catPrice.price) : Number(svc.basePrice);
-                        return (
-                          <li key={svc.id} className="flex justify-between text-sm">
-                            <span>{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</span>
-                            <span className="font-medium">{formatCurrency(price)}</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        <TabsContent value="tipos" className="mt-4">
+          <TiposDeVeiculo services={services} onRefresh={fetchServices} />
         </TabsContent>
       </Tabs>
 
@@ -286,23 +237,6 @@ export default function ServicosPage() {
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Lavagem Simples" required />
               </div>
               <div>
-                <Label>Categoria</Label>
-                <select
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
-                  value={form.categoryId}
-                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                >
-                  <option value="">Sem categoria</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <Label>Preço base * {form.pricingType === "PER_M2" && <span className="text-muted-foreground text-xs">(por m²)</span>}</Label>
-                <Input type="number" step="0.01" min="0" value={form.basePrice}
-                  onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
-                  placeholder="0,00" required />
-              </div>
-              <div>
                 <Label>Tipo de cobrança</Label>
                 <select
                   className="w-full border rounded-md px-3 py-2 text-sm bg-background"
@@ -313,7 +247,14 @@ export default function ServicosPage() {
                   <option value="PER_M2">Por m² (tapete)</option>
                 </select>
               </div>
+              <div className="md:col-span-2">
+                <Label>Preço base * {form.pricingType === "PER_M2" && <span className="text-muted-foreground text-xs">(por m²)</span>}</Label>
+                <Input type="number" step="0.01" min="0" value={form.basePrice}
+                  onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
+                  placeholder="0,00" required />
+              </div>
             </div>
+
             <div>
               <Label>Descrição</Label>
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição do serviço" />
@@ -329,50 +270,30 @@ export default function ServicosPage() {
             </label>
 
             <div className="border-t pt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base">Preço por categoria de veículo</Label>
-              </div>
+              <Label className="text-base">Preço por tipo de veículo</Label>
 
-              <div className="flex gap-3 text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={form.samePriceAll}
-                    onChange={() => setForm({ ...form, samePriceAll: true })}
-                  />
-                  Mesmo preço para todas as categorias (usa o preço base)
-                </label>
-              </div>
-              <div className="flex gap-3 text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={!form.samePriceAll}
-                    onChange={() => setForm({ ...form, samePriceAll: false })}
-                  />
-                  Preço diferente por categoria (escolha abaixo)
-                </label>
-              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" checked={form.samePriceAll} onChange={() => setForm({ ...form, samePriceAll: true })} />
+                Mesmo preço para todos os tipos (usa o preço base)
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" checked={!form.samePriceAll} onChange={() => setForm({ ...form, samePriceAll: false })} />
+                Preço diferente por tipo (escolha abaixo)
+              </label>
 
               {!form.samePriceAll && (
                 <div className="space-y-2 mt-2">
                   <p className="text-xs text-muted-foreground">
-                    Marque as categorias em que esse serviço se aplica. Categorias sem marcação não aparecerão no atendimento.
+                    Marque os tipos em que esse serviço se aplica. Tipos sem marcação não aparecerão no atendimento.
                   </p>
                   {form.prices.map((p) => (
                     <div key={p.category} className="flex items-center gap-3">
                       <label className="flex items-center gap-2 flex-1 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={p.enabled}
-                          onChange={() => toggleCategory(p.category)}
-                        />
+                        <input type="checkbox" checked={p.enabled} onChange={() => toggleCategory(p.category)} />
                         <span className="text-sm">{VEHICLE_CATEGORY_LABELS[p.category]}</span>
                       </label>
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="number" step="0.01" min="0"
                         value={p.price}
                         onChange={(e) => setCategoryPrice(p.category, e.target.value)}
                         placeholder="0,00"
@@ -386,15 +307,11 @@ export default function ServicosPage() {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                {error}
-              </div>
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>
             )}
 
             <div className="flex gap-2 justify-end">
-              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)} disabled={submitting}>
-                Cancelar
-              </Button>
+              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)} disabled={submitting}>Cancelar</Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? "Salvando..." : editingId ? "Salvar" : "Criar Serviço"}
               </Button>
@@ -406,97 +323,14 @@ export default function ServicosPage() {
   );
 }
 
-function CategoriaServicos({ categories, onRefresh }: { categories: { id: string; name: string }[]; onRefresh: () => void }) {
-  const [newName, setNewName] = useState("");
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    setSaving(true);
-    await fetch("/api/categorias-servico", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim() }),
-    });
-    setNewName("");
-    setSaving(false);
-    onRefresh();
-  }
-
-  async function save(id: string) {
-    await fetch(`/api/categorias-servico/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName }),
-    });
-    setEditId(null);
-    onRefresh();
-  }
-
-  async function del(id: string) {
-    if (!confirm("Excluir categoria?")) return;
-    await fetch(`/api/categorias-servico/${id}`, { method: "DELETE" });
-    onRefresh();
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2"><Tag className="w-4 h-4" />Categorias de Serviço</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <form onSubmit={add} className="flex gap-2">
-          <input
-            className="flex-1 border rounded-md px-3 py-2 text-sm bg-background"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Nova categoria..."
-          />
-          <Button type="submit" size="sm" disabled={saving || !newName.trim()}>
-            <Plus className="w-4 h-4" />
-          </Button>
-        </form>
-        {categories.map((c) => (
-          <div key={c.id} className="flex items-center gap-2">
-            {editId === c.id ? (
-              <>
-                <input
-                  className="flex-1 border rounded-md px-3 py-1.5 text-sm bg-background"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  autoFocus
-                />
-                <Button size="sm" onClick={() => save(c.id)}>Salvar</Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditId(null)}>Cancelar</Button>
-              </>
-            ) : (
-              <>
-                <span className="flex-1 text-sm">{c.name}</span>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
-                  onClick={() => { setEditId(c.id); setEditName(c.name); }}>
-                  <Pencil className="w-3 h-3" />
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => del(c.id)}>
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </>
-            )}
-          </div>
-        ))}
-        {categories.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma categoria ainda.</p>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function TiposDeVeiculo({ servicesByCategory }: { servicesByCategory: { category: string; services: any[] }[] }) {
+function TiposDeVeiculo({ services, onRefresh }: { services: ServiceData[]; onRefresh: () => void }) {
   const [labels, setLabels] = useState<Record<string, string>>({});
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
+  const [labelValue, setLabelValue] = useState("");
+  const [savingLabel, setSavingLabel] = useState(false);
+  const [editingPrice, setEditingPrice] = useState<{ serviceId: string; category: string } | null>(null);
+  const [priceValue, setPriceValue] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
 
   useEffect(() => {
     fetch("/api/categorias-veiculo")
@@ -508,52 +342,156 @@ function TiposDeVeiculo({ servicesByCategory }: { servicesByCategory: { category
       });
   }, []);
 
-  async function save(category: string) {
-    setSaving(true);
+  function getLabel(cat: string) {
+    return labels[cat] || VEHICLE_CATEGORY_LABELS[cat] || cat;
+  }
+
+  async function saveLabel(category: string) {
+    setSavingLabel(true);
     await fetch("/api/categorias-veiculo", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify([{ category, label: editValue }]),
+      body: JSON.stringify([{ category, label: labelValue }]),
     });
-    setLabels((prev) => ({ ...prev, [category]: editValue }));
-    setEditing(null);
-    setSaving(false);
+    setLabels((prev) => ({ ...prev, [category]: labelValue }));
+    setEditingLabel(null);
+    setSavingLabel(false);
   }
 
+  async function savePrice() {
+    if (!editingPrice) return;
+    const { serviceId, category } = editingPrice;
+    const svc = services.find((s) => s.id === serviceId);
+    if (!svc) return;
+
+    setSavingPrice(true);
+    const newPrice = parseFloat(priceValue);
+
+    let payload: any;
+    if (svc.prices.length === 0) {
+      payload = { basePrice: newPrice };
+    } else {
+      const existing = svc.prices.map((p) => ({ category: p.category, price: Number(p.price) }));
+      const hasCat = existing.some((p) => p.category === category);
+      payload = {
+        prices: hasCat
+          ? existing.map((p) => p.category === category ? { ...p, price: newPrice } : p)
+          : [...existing, { category, price: newPrice }],
+      };
+    }
+
+    await fetch(`/api/servicos/${serviceId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    setEditingPrice(null);
+    setSavingPrice(false);
+    onRefresh();
+  }
+
+  const servicesByCategory = VEHICLE_CATEGORIES.map((cat) => ({
+    category: cat,
+    services: services.filter((s) => s.prices.length === 0 || s.prices.some((p) => p.category === cat)),
+  }));
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <Tag className="w-4 h-4" /> Tipos de Veículo
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">Edite os nomes exibidos para cada tipo de veículo</p>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {servicesByCategory.map(({ category }) => (
-          <div key={category} className="flex items-center gap-2">
-            {editing === category ? (
-              <>
-                <input
-                  className="flex-1 border rounded-md px-3 py-1.5 text-sm bg-background"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  autoFocus
-                />
-                <Button size="sm" onClick={() => save(category)} disabled={saving}>Salvar</Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancelar</Button>
-              </>
-            ) : (
-              <>
-                <span className="flex-1 text-sm">{labels[category] || category}</span>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
-                  onClick={() => { setEditing(category); setEditValue(labels[category] || category); }}>
-                  <Pencil className="w-3 h-3" />
-                </Button>
-              </>
-            )}
-          </div>
+    <div className="space-y-4">
+      {/* Edição de nomes */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Nomes exibidos</CardTitle>
+          <p className="text-xs text-muted-foreground">Personalize o nome de cada tipo de veículo</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {VEHICLE_CATEGORIES.map((cat) => (
+            <div key={cat} className="flex items-center gap-2">
+              {editingLabel === cat ? (
+                <>
+                  <Input
+                    className="flex-1 h-8"
+                    value={labelValue}
+                    onChange={(e) => setLabelValue(e.target.value)}
+                  />
+                  <Button size="sm" className="h-8 w-8 p-0" onClick={() => saveLabel(cat)} disabled={savingLabel}>
+                    <Check className="w-3 h-3" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingLabel(null)}>
+                    <X className="w-3 h-3" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm">{getLabel(cat)}</span>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                    onClick={() => { setEditingLabel(cat); setLabelValue(getLabel(cat)); }}>
+                    <Pencil className="w-3 h-3" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Serviços por tipo com edição de preço */}
+      <p className="text-sm font-medium text-muted-foreground">Serviços e preços por tipo</p>
+      <div className="grid md:grid-cols-2 gap-3">
+        {servicesByCategory.map(({ category, services: applicable }) => (
+          <Card key={category}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center justify-between">
+                {getLabel(category)}
+                <Badge variant="secondary" className="ml-auto">{applicable.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {applicable.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhum serviço aplicável</p>
+              ) : (
+                <ul className="space-y-2">
+                  {applicable.map((svc) => {
+                    const catPrice = svc.prices.find((p) => p.category === category);
+                    const price = catPrice ? Number(catPrice.price) : Number(svc.basePrice);
+                    const isEditing = editingPrice?.serviceId === svc.id && editingPrice?.category === category;
+
+                    return (
+                      <li key={svc.id} className="flex items-center gap-2 text-sm">
+                        <span className="flex-1 truncate">{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</span>
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Input
+                              type="number" step="0.01" min="0"
+                              value={priceValue}
+                              onChange={(e) => setPriceValue(e.target.value)}
+                              className="w-24 h-7 text-xs"
+                            />
+                            <Button size="sm" className="h-7 w-7 p-0" onClick={savePrice} disabled={savingPrice}>
+                              <Check className="w-3 h-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingPrice(null)}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="font-medium text-xs">{formatCurrency(price)}</span>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0"
+                              onClick={() => { setEditingPrice({ serviceId: svc.id, category }); setPriceValue(String(price)); }}>
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
