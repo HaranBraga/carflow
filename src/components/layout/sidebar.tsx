@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Car, LayoutDashboard, DollarSign, Users, Star,
-  CloudSun, BarChart2, LogOut, Menu, X, UserCheck, Wrench, History, Settings, TrendingUp
+  CloudSun, BarChart2, LogOut, Menu, X, UserCheck, Wrench, History, Settings, TrendingUp, MoreHorizontal
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,14 @@ const navItems = [
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
+// Itens exibidos na bottom nav do celular
+const bottomNavItems = [
+  { href: "/", label: "Início", icon: LayoutDashboard },
+  { href: "/entrada", label: "Entrada", icon: Car },
+  { href: "/lavagem", label: "Lavagem", icon: Wrench },
+  { href: "/historico", label: "Histórico", icon: History },
+];
+
 interface SidebarProps {
   tenantName?: string;
   userName?: string;
@@ -36,13 +44,17 @@ export function Sidebar({ tenantName, userName }: SidebarProps) {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 p-4 border-b">
-        <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
+        <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center shrink-0">
           <Car className="w-5 h-5 text-white" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="font-bold text-sm truncate">{tenantName || "CarFlow ERP"}</p>
           <p className="text-xs text-muted-foreground truncate">{userName}</p>
         </div>
+        {/* Botão fechar no mobile */}
+        <button className="lg:hidden p-1 rounded" onClick={() => setMobileOpen(false)}>
+          <X className="w-5 h-5 text-muted-foreground" />
+        </button>
       </div>
 
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -79,28 +91,57 @@ export function Sidebar({ tenantName, userName }: SidebarProps) {
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* ── Desktop: sidebar fixa ── */}
       <aside className="hidden lg:flex w-64 flex-col border-r bg-card min-h-screen fixed left-0 top-0 z-40">
         <SidebarContent />
       </aside>
 
-      {/* Mobile toggle button */}
-      <button
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-card border rounded-lg shadow-sm"
-        onClick={() => setMobileOpen(!mobileOpen)}
-      >
-        {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
-
-      {/* Mobile sidebar */}
+      {/* ── Mobile: overlay sidebar (abre pelo botão "Mais") ── */}
       {mobileOpen && (
         <>
-          <div className="lg:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setMobileOpen(false)} />
-          <aside className="lg:hidden fixed left-0 top-0 bottom-0 w-64 bg-card border-r z-50">
+          <div
+            className="lg:hidden fixed inset-0 bg-black/50 z-40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="lg:hidden fixed left-0 top-0 bottom-0 w-72 bg-card border-r z-50 flex flex-col">
             <SidebarContent />
           </aside>
         </>
       )}
+
+      {/* ── Mobile: bottom navigation bar ── */}
+      <nav
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="flex h-16">
+          {bottomNavItems.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  "flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors",
+                  active ? "text-primary" : "text-muted-foreground"
+                )}
+              >
+                <Icon className={cn("w-5 h-5", active && "scale-110 transition-transform")} />
+                <span className="text-[10px] font-medium">{label}</span>
+              </Link>
+            );
+          })}
+
+          {/* Botão "Mais" abre sidebar completa */}
+          <button
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 text-muted-foreground"
+            onClick={() => setMobileOpen(true)}
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[10px] font-medium">Mais</span>
+          </button>
+        </div>
+      </nav>
     </>
   );
 }

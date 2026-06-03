@@ -1,10 +1,9 @@
 "use client";
 import { useRef, useState, useEffect } from "react";
-import { Car, User, CheckCircle, Lightbulb, X, Loader2 } from "lucide-react";
+import { Car, User, CheckCircle, Lightbulb, X, Loader2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -37,11 +36,27 @@ interface ServiceItem {
   discount: number;
 }
 
+const GENDER_OPTIONS = [
+  { value: "NOT_INFORMED", label: "Não inf." },
+  { value: "MALE", label: "Masculino" },
+  { value: "FEMALE", label: "Feminino" },
+  { value: "OTHER", label: "Outro" },
+];
+
 const initialCustomer: CustomerData = { name: "", phone: "", gender: "NOT_INFORMED", isUber: false };
 const initialVehicle: VehicleData = { plate: "", model: "", color: "", category: "POPULAR" };
 
+const STEPS: { key: Step; label: string }[] = [
+  { key: "placa", label: "Placa" },
+  { key: "cliente", label: "Cliente" },
+  { key: "servicos", label: "Serviços" },
+  { key: "checklist", label: "Avarias" },
+  { key: "confirmacao", label: "Confirmar" },
+];
+
 export default function EntradaPage() {
   const submittingRef = useRef(false);
+  const topRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState<Step>("placa");
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -57,8 +72,14 @@ export default function EntradaPage() {
   const [obs, setObs] = useState("");
   const [opportunities, setOpportunities] = useState<string[]>([]);
   const [orderNotes, setOrderNotes] = useState("");
-
   const [phoneSearching, setPhoneSearching] = useState(false);
+
+  const stepIndex = STEPS.findIndex((s) => s.key === step);
+
+  // Rola para o topo ao trocar de step
+  useEffect(() => {
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [step]);
 
   function reset() {
     submittingRef.current = false;
@@ -75,7 +96,7 @@ export default function EntradaPage() {
     setSuccessInfo(null);
   }
 
-  // Auto-busca por telefone quando número tem 11 dígitos (DDD + 9 + número)
+  // Auto-busca por telefone quando número tem 11 dígitos
   useEffect(() => {
     if (existingVehicle || customer.id) return;
     const digits = customer.phone.replace(/\D/g, "");
@@ -97,7 +118,7 @@ export default function EntradaPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer.phone]);
 
-  // Auto-busca quando placa tem 7+ caracteres
+  // Auto-busca por placa
   useEffect(() => {
     const plate = plateInput.replace(/[^A-Z0-9]/gi, "");
     if (plate.length < 7) {
@@ -132,7 +153,6 @@ export default function EntradaPage() {
     }
   }
 
-
   async function loadServices() {
     const res = await fetch("/api/servicos");
     setAvailableServices(await res.json());
@@ -153,7 +173,6 @@ export default function EntradaPage() {
   }
 
   function serviceAppliesToCategory(svc: any, forOpportunity = false): boolean {
-    // Serviços "apenas oportunidade" não aparecem na lista de execução
     if (!forOpportunity && svc.isOpportunityOnly) return false;
     if (!svc.prices || svc.prices.length === 0) return true;
     const cat = vehicle.category || existingVehicle?.category;
@@ -161,13 +180,13 @@ export default function EntradaPage() {
     return svc.prices.some((p: any) => p.category === cat);
   }
 
-  function addService(svc: any) {
-    if (services.find((s) => s.serviceId === svc.id)) return;
-    setServices([...services, { serviceId: svc.id, name: svc.name, unitPrice: priceForService(svc), quantity: 1, discount: 0 }]);
-  }
-
-  function removeService(id: string) {
-    setServices(services.filter((s) => s.serviceId !== id));
+  function toggleService(svc: any) {
+    const exists = services.find((s) => s.serviceId === svc.id);
+    if (exists) {
+      setServices(services.filter((s) => s.serviceId !== svc.id));
+    } else {
+      setServices([...services, { serviceId: svc.id, name: svc.name, unitPrice: priceForService(svc), quantity: 1, discount: 0 }]);
+    }
   }
 
   function addOpportunity(id: string) {
@@ -257,140 +276,151 @@ export default function EntradaPage() {
     }
   }
 
-  // Tela de sucesso
+  // ── Tela de sucesso ──
   if (successInfo) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <Card>
-          <CardContent className="py-12 text-center space-y-4">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle className="w-8 h-8 text-green-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold">Entrada registrada!</h2>
-              <p className="text-muted-foreground mt-1">
-                <span className="font-mono font-bold">{successInfo.plate}</span> — {successInfo.customer}
-              </p>
-            </div>
-            <Button onClick={reset} size="lg">
-              <Car className="w-4 h-4 mr-2" /> Nova Entrada
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center px-4">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
+          <CheckCircle className="w-10 h-10 text-green-600" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold">Entrada registrada!</h2>
+          <p className="text-muted-foreground mt-1">
+            <span className="font-mono font-bold text-foreground">{successInfo.plate}</span>
+            {" — "}{successInfo.customer}
+          </p>
+        </div>
+        <Button onClick={reset} size="lg" className="h-14 px-10 text-base w-full max-w-xs">
+          <Car className="w-5 h-5 mr-2" /> Nova Entrada
+        </Button>
       </div>
     );
   }
 
-  const steps = [
-    { key: "placa", label: "Placa" },
-    { key: "cliente", label: "Cliente" },
-    { key: "servicos", label: "Serviços" },
-    { key: "checklist", label: "Obs" },
-    { key: "confirmacao", label: "Confirmar" },
-  ];
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      <div className="flex items-center gap-3">
-        <Car className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-bold">Entrada de Veículo</h1>
-      </div>
-
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-        {steps.map(({ key, label }, i, arr) => (
-          <div key={key} className="flex items-center gap-1.5 shrink-0">
-            <span className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${step === key ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>{i + 1}</span>
-            <span className={`text-xs ${step === key ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{label}</span>
-            {i < arr.length - 1 && <span className="text-muted-foreground text-xs">›</span>}
-          </div>
+  // ── Progress bar ──
+  const ProgressBar = () => (
+    <div ref={topRef} className="space-y-2 mb-4">
+      <div className="flex gap-1">
+        {STEPS.map((s, i) => (
+          <div
+            key={s.key}
+            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+              i <= stepIndex ? "bg-primary" : "bg-muted"
+            }`}
+          />
         ))}
       </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground">{STEPS[stepIndex].label}</p>
+        <p className="text-xs text-muted-foreground">{stepIndex + 1} / {STEPS.length}</p>
+      </div>
+    </div>
+  );
 
-      {/* STEP 1: PLACA */}
+  return (
+    <div className="max-w-2xl mx-auto">
+      <ProgressBar />
+
+      {/* ─── STEP 1: PLACA ─── */}
       {step === "placa" && (
-        <Card>
-          <CardHeader><CardTitle>Digite a placa do veículo</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
+        <div className="space-y-4">
+          {/* Input de placa estilizado */}
+          <div className="bg-card rounded-2xl border p-4 space-y-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Placa do veículo</p>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input
-                  placeholder="ABC-1234 ou ABC1D23"
+                  placeholder="ABC-1234"
                   value={plateInput}
                   onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
-                  className="text-lg font-mono uppercase tracking-widest pr-8"
+                  className="text-3xl font-mono font-bold uppercase tracking-[0.25em] text-center h-16 border-2 focus:border-primary rounded-xl"
                   maxLength={8}
                 />
                 {searching && (
-                  <Loader2 className="absolute right-3 top-3 w-4 h-4 animate-spin text-muted-foreground" />
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-muted-foreground" />
                 )}
               </div>
-              <PlateScanner onPlateDetected={(plate) => { setPlateInput(plate); }} />
+              <PlateScanner onPlateDetected={(plate) => setPlateInput(plate)} />
             </div>
 
+            {/* Veículo encontrado */}
             {existingVehicle && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-1">
-                <p className="font-semibold text-green-800">✓ Veículo encontrado</p>
-                <p className="text-sm">{existingVehicle.model} {existingVehicle.color ? `· ${existingVehicle.color}` : ""} — {VEHICLE_CATEGORY_LABELS[existingVehicle.category]}</p>
-                <p className="text-sm text-muted-foreground">Cliente: <strong>{existingVehicle.customer?.name}</strong> · {formatPhone(existingVehicle.customer?.phone || "")}</p>
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <p className="font-semibold text-green-800 text-sm">Veículo encontrado</p>
+                </div>
+                <p className="text-sm font-medium">{existingVehicle.model}{existingVehicle.color ? ` · ${existingVehicle.color}` : ""}</p>
+                <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[existingVehicle.category]}</p>
+                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-green-200">
+                  <User className="w-3.5 h-3.5 text-green-700" />
+                  <p className="text-sm text-green-800"><strong>{existingVehicle.customer?.name}</strong> · {formatPhone(existingVehicle.customer?.phone || "")}</p>
+                </div>
               </div>
             )}
 
+            {/* Veículo novo — campos extras */}
             {!existingVehicle && plateInput.replace(/[^A-Z0-9]/gi, "").length >= 7 && !searching && (
-              <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm text-blue-800 font-medium">Placa não encontrada. Preencha os dados do veículo.</p>
+              <div className="space-y-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                  <p className="text-sm text-blue-800 font-medium">Placa nova — preencha os dados:</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Tipo de veículo *</Label>
+                  <Select value={vehicle.category} onValueChange={(v) => setVehicle({ ...vehicle, category: v })}>
+                    <SelectTrigger className="mt-1 h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(VEHICLE_CATEGORY_LABELS).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>Categoria *</Label>
-                    <Select value={vehicle.category} onValueChange={(v) => setVehicle({ ...vehicle, category: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(VEHICLE_CATEGORY_LABELS).map(([k, v]) => (
-                          <SelectItem key={k} value={k}>{v}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Modelo</Label>
+                    <Input className="mt-1 h-11" placeholder="Civic, Hilux..." value={vehicle.model} onChange={(e) => setVehicle({ ...vehicle, model: e.target.value })} />
                   </div>
                   <div>
-                    <Label>Modelo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                    <Input placeholder="Civic, Hilux..." value={vehicle.model} onChange={(e) => setVehicle({ ...vehicle, model: e.target.value })} />
-                  </div>
-                  <div>
-                    <Label>Cor <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                    <Input placeholder="Branco, Preto..." value={vehicle.color} onChange={(e) => setVehicle({ ...vehicle, color: e.target.value })} />
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Cor</Label>
+                    <Input className="mt-1 h-11" placeholder="Branco..." value={vehicle.color} onChange={(e) => setVehicle({ ...vehicle, color: e.target.value })} />
                   </div>
                 </div>
               </div>
             )}
+          </div>
 
-            <Button
-              className="w-full h-12 text-base"
-              onClick={() => goToStep("cliente")}
-              disabled={searching || plateInput.replace(/[^A-Z0-9]/gi, "").length < 7 || (!existingVehicle && !vehicle.category)}
-            >
-              Próximo
-            </Button>
-          </CardContent>
-        </Card>
+          <Button
+            className="w-full h-14 text-base rounded-xl"
+            onClick={() => goToStep("cliente")}
+            disabled={searching || plateInput.replace(/[^A-Z0-9]/gi, "").length < 7 || (!existingVehicle && !vehicle.category)}
+          >
+            Próximo — Cliente
+          </Button>
+        </div>
       )}
 
-      {/* STEP 2: CLIENTE */}
+      {/* ─── STEP 2: CLIENTE ─── */}
       {step === "cliente" && (
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><User className="w-5 h-5" />Dados do Cliente</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
+        <div className="space-y-4">
+          <div className="bg-card rounded-2xl border p-4 space-y-4">
             {existingVehicle ? (
-              /* Veículo já cadastrado — cliente conhecido */
-              <div className="bg-blue-50 rounded-lg p-3 space-y-0.5">
-                <p className="font-medium">{customer.name}</p>
-                <p className="text-sm text-muted-foreground">{customer.phone}</p>
+              <div className="flex items-center gap-3 bg-blue-50 rounded-xl p-4">
+                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                  <User className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-bold">{customer.name}</p>
+                  <p className="text-sm text-muted-foreground">{formatPhone(customer.phone)}</p>
+                  {customer.isUber && <Badge variant="info" className="mt-1 text-xs">Uber</Badge>}
+                </div>
               </div>
             ) : (
-              /* Formulário sempre visível — telefone primeiro, nome depois */
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div>
-                  <Label>Telefone / WhatsApp *</Label>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Telefone / WhatsApp *</Label>
                   <div className="relative mt-1">
                     <Input
                       value={customer.phone}
@@ -398,10 +428,10 @@ export default function EntradaPage() {
                       placeholder="DDD + número"
                       type="tel"
                       inputMode="numeric"
-                      className="pr-8"
+                      className="h-14 text-xl tracking-widest pr-10"
                     />
                     {phoneSearching && (
-                      <Loader2 className="absolute right-3 top-3 w-4 h-4 animate-spin text-muted-foreground" />
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-muted-foreground" />
                     )}
                   </div>
                 </div>
@@ -410,7 +440,7 @@ export default function EntradaPage() {
                   <>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <Label>Nome *</Label>
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Nome *</Label>
                         {customer.id && (
                           <span className="text-xs text-green-700 font-medium flex items-center gap-1">
                             <CheckCircle className="w-3 h-3" /> Cliente encontrado
@@ -422,185 +452,283 @@ export default function EntradaPage() {
                         onChange={(e) => !customer.id && setCustomer({ ...customer, name: e.target.value })}
                         placeholder={phoneSearching ? "Buscando..." : "Nome do cliente"}
                         readOnly={!!customer.id}
-                        className={customer.id ? "bg-green-50 border-green-300 text-green-900" : ""}
+                        className={`h-12 ${customer.id ? "bg-green-50 border-green-300 text-green-900" : ""}`}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>Gênero</Label>
-                        <Select value={customer.gender} onValueChange={(v) => setCustomer({ ...customer, gender: v })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="NOT_INFORMED">Não informado</SelectItem>
-                            <SelectItem value="MALE">Masculino</SelectItem>
-                            <SelectItem value="FEMALE">Feminino</SelectItem>
-                            <SelectItem value="OTHER">Outro</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>É Uber?</Label>
-                        <Select value={customer.isUber ? "sim" : "nao"} onValueChange={(v) => setCustomer({ ...customer, isUber: v === "sim" })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="nao">Não</SelectItem>
-                            <SelectItem value="sim">Sim</SelectItem>
-                          </SelectContent>
-                        </Select>
+
+                    {/* Gênero — botões visuais */}
+                    <div>
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Gênero</Label>
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {GENDER_OPTIONS.map((g) => (
+                          <button
+                            key={g.value}
+                            type="button"
+                            onClick={() => setCustomer({ ...customer, gender: g.value })}
+                            className={`py-2.5 rounded-xl border text-xs font-medium transition-colors ${
+                              customer.gender === g.value
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background border-input text-muted-foreground"
+                            }`}
+                          >
+                            {g.label}
+                          </button>
+                        ))}
                       </div>
                     </div>
+
+                    {/* É Uber — toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setCustomer({ ...customer, isUber: !customer.isUber })}
+                      className={`w-full py-3 rounded-xl border text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                        customer.isUber
+                          ? "bg-primary/10 text-primary border-primary"
+                          : "bg-background border-input text-muted-foreground"
+                      }`}
+                    >
+                      <Car className="w-4 h-4" />
+                      {customer.isUber ? "✓ Motorista Uber" : "Motorista Uber?"}
+                    </button>
                   </>
                 )}
               </div>
             )}
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("placa")} className="flex-1 h-12">Voltar</Button>
-              <Button onClick={() => goToStep("servicos")} className="flex-1 h-12 text-base" disabled={!customer.name || customer.phone.replace(/\D/g, "").length < 10}>
-                Próximo
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep("placa")} className="h-14 px-5 rounded-xl">
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={() => goToStep("servicos")}
+              className="flex-1 h-14 text-base rounded-xl"
+              disabled={!customer.name || customer.phone.replace(/\D/g, "").length < 10}
+            >
+              Próximo — Serviços
+            </Button>
+          </div>
+        </div>
       )}
 
-      {/* STEP 3: SERVIÇOS */}
+      {/* ─── STEP 3: SERVIÇOS ─── */}
       {step === "servicos" && (
-        <Card>
-          <CardHeader><CardTitle>Serviços</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              Preços para <strong>{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</strong>
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-              {availableServices.filter((s) => serviceAppliesToCategory(s, false)).map((svc) => (
-                <button key={svc.id} onClick={() => addService(svc)}
-                  className={`text-left p-3 rounded-lg border transition-colors active:scale-[0.98] ${services.find((s) => s.serviceId === svc.id) ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"}`}>
-                  <p className="font-medium text-sm">{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</p>
-                  <p className="text-xs text-muted-foreground">{formatCurrency(priceForService(svc))}</p>
-                </button>
-              ))}
+        <div className="space-y-4">
+          <div className="bg-card rounded-2xl border p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                {VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}
+              </p>
+              {services.length > 0 && (
+                <Badge variant="secondary">{services.length} selecionado{services.length > 1 ? "s" : ""}</Badge>
+              )}
             </div>
+
+            {/* Grid de serviços — sem caixa de scroll restrita */}
+            <div className="grid grid-cols-2 gap-2">
+              {availableServices.filter((s) => serviceAppliesToCategory(s, false)).map((svc) => {
+                const selected = !!services.find((s) => s.serviceId === svc.id);
+                return (
+                  <button
+                    key={svc.id}
+                    onClick={() => toggleService(svc)}
+                    className={`text-left p-3 rounded-xl border-2 transition-all active:scale-[0.97] min-h-[68px] flex flex-col justify-between ${
+                      selected
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-background"
+                    }`}
+                  >
+                    <p className={`text-sm font-medium leading-tight ${selected ? "text-primary" : ""}`}>
+                      {svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}
+                    </p>
+                    <p className={`text-xs mt-1 ${selected ? "text-primary/70" : "text-muted-foreground"}`}>
+                      {formatCurrency(priceForService(svc))}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Resumo selecionados */}
             {services.length > 0 && (
-              <div className="space-y-2 border-t pt-3">
+              <div className="border-t pt-3 space-y-1.5">
                 {services.map((s) => (
                   <div key={s.serviceId} className="flex items-center justify-between">
                     <span className="text-sm">{s.name}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{formatCurrency(s.unitPrice)}</span>
-                      <button onClick={() => removeService(s.serviceId)} className="text-destructive"><X className="w-4 h-4" /></button>
+                      <span className="text-sm font-semibold">{formatCurrency(s.unitPrice)}</span>
+                      <button
+                        onClick={() => setServices(services.filter((sv) => sv.serviceId !== s.serviceId))}
+                        className="text-destructive p-0.5"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
-                <div className="flex justify-between font-bold pt-2 border-t">
-                  <span>Total</span><span>{formatCurrency(total)}</span>
+                <div className="flex justify-between font-bold pt-2 border-t text-base">
+                  <span>Total</span>
+                  <span>{formatCurrency(total)}</span>
                 </div>
               </div>
             )}
+
             <div>
-              <Label>Observações</Label>
-              <Textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Informações adicionais..." rows={2} />
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Observações</Label>
+              <Textarea
+                className="mt-1"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                placeholder="Informações adicionais..."
+                rows={2}
+              />
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("cliente")} className="flex-1 h-12">Voltar</Button>
-              <Button onClick={() => goToStep("checklist")} className="flex-1 h-12 text-base" disabled={services.length === 0}>
-                {services.length === 0 ? "Selecione ao menos 1" : "Próximo"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep("cliente")} className="h-14 px-5 rounded-xl">
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={() => goToStep("checklist")}
+              className="flex-1 h-14 text-base rounded-xl"
+              disabled={services.length === 0}
+            >
+              {services.length === 0 ? "Selecione ao menos 1" : "Próximo — Avarias"}
+            </Button>
+          </div>
+        </div>
       )}
 
-      {/* STEP 4: OBS + OPORTUNIDADES */}
+      {/* ─── STEP 4: AVARIAS + OPORTUNIDADES ─── */}
       {step === "checklist" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5" /> Avarias e Oportunidades
-              <Badge variant="outline" className="ml-auto text-xs">Opcional</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <div className="space-y-4">
+          <div className="bg-card rounded-2xl border p-4 space-y-4">
             <div>
-              <Label>Observações de avarias</Label>
-              <Textarea value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex: Arranhão no para-choque traseiro..." rows={3} />
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Avarias observadas</Label>
+              <Textarea
+                className="mt-1"
+                value={obs}
+                onChange={(e) => setObs(e.target.value)}
+                placeholder="Ex: Arranhão no para-choque traseiro..."
+                rows={4}
+              />
             </div>
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium flex items-center gap-2 mb-2">
-                <Lightbulb className="w-4 h-4 text-yellow-500" /> Oportunidades de Serviço
-              </p>
+
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-yellow-500 shrink-0" />
+                <p className="text-sm font-medium">Oportunidades de Serviço</p>
+                <Badge variant="outline" className="ml-auto text-xs">Opcional</Badge>
+              </div>
+
               <Select value="" onValueChange={addOpportunity}>
-                <SelectTrigger><SelectValue placeholder="Adicionar serviço..." /></SelectTrigger>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Adicionar oportunidade..." />
+                </SelectTrigger>
                 <SelectContent>
-                  {availableServices.filter((s) => serviceAppliesToCategory(s, true)).filter((svc) => !opportunities.includes(svc.id)).map((svc) => (
-                    <SelectItem key={svc.id} value={svc.id}>{svc.name} — {formatCurrency(priceForService(svc))}</SelectItem>
-                  ))}
+                  {availableServices
+                    .filter((s) => serviceAppliesToCategory(s, true))
+                    .filter((svc) => !opportunities.includes(svc.id))
+                    .map((svc) => (
+                      <SelectItem key={svc.id} value={svc.id}>
+                        {svc.name} — {formatCurrency(priceForService(svc))}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
+
               {opportunityServices.length > 0 && (
-                <div className="mt-2 space-y-1">
+                <div className="space-y-2">
                   {opportunityServices.map((svc: any) => (
-                    <div key={svc.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
-                      <span className="text-sm">{svc.name}</span>
-                      <button onClick={() => removeOpportunity(svc.id)} className="text-destructive"><X className="w-4 h-4" /></button>
+                    <div key={svc.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5">
+                      <span className="text-sm font-medium">{svc.name}</span>
+                      <button onClick={() => removeOpportunity(svc.id)} className="text-destructive ml-2">
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("servicos")} className="flex-1 h-12">Voltar</Button>
-              <Button onClick={() => setStep("confirmacao")} className="flex-1 h-12 text-base">Próximo: Confirmar</Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep("servicos")} className="h-14 px-5 rounded-xl">
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button onClick={() => setStep("confirmacao")} className="flex-1 h-14 text-base rounded-xl">
+              Próximo — Confirmar
+            </Button>
+          </div>
+        </div>
       )}
 
-      {/* STEP 5: CONFIRMAÇÃO */}
+      {/* ─── STEP 5: CONFIRMAÇÃO ─── */}
       {step === "confirmacao" && (
-        <Card>
-          <CardHeader><CardTitle>Confirmar Entrada</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="bg-muted rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Veículo</p>
-                <p className="font-bold font-mono">{vehicle.plate || plateInput}</p>
-                <p>{vehicle.model} {vehicle.color}</p>
-                <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</p>
-              </div>
-              <div className="bg-muted rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-                <p className="font-bold">{customer.name}</p>
-                <p>{formatPhone(customer.phone)}</p>
-                {customer.isUber && <Badge variant="info" className="mt-1">Uber</Badge>}
-              </div>
+        <div className="space-y-4">
+          {/* Cards de resumo */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-card border rounded-2xl p-4 space-y-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Veículo</p>
+              <p className="font-bold font-mono text-lg">{vehicle.plate || plateInput}</p>
+              <p className="text-sm">{vehicle.model} {vehicle.color}</p>
+              <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</p>
             </div>
-            {services.length > 0 && (
-              <div>
-                {services.map((s) => (
-                  <div key={s.serviceId} className="flex justify-between text-sm py-0.5">
-                    <span>{s.name}</span><span className="font-medium">{formatCurrency(s.unitPrice)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between font-bold border-t pt-1 mt-1">
-                  <span>Total</span><span>{formatCurrency(total)}</span>
+            <div className="bg-card border rounded-2xl p-4 space-y-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Cliente</p>
+              <p className="font-bold">{customer.name}</p>
+              <p className="text-sm text-muted-foreground">{formatPhone(customer.phone)}</p>
+              {customer.isUber && <Badge variant="info" className="text-xs">Uber</Badge>}
+            </div>
+          </div>
+
+          {/* Serviços */}
+          {services.length > 0 && (
+            <div className="bg-card border rounded-2xl p-4 space-y-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Serviços</p>
+              {services.map((s) => (
+                <div key={s.serviceId} className="flex justify-between text-sm">
+                  <span>{s.name}</span>
+                  <span className="font-medium">{formatCurrency(s.unitPrice)}</span>
                 </div>
+              ))}
+              <div className="flex justify-between font-bold border-t pt-2 text-base">
+                <span>Total</span>
+                <span className="text-primary">{formatCurrency(total)}</span>
               </div>
-            )}
-            {obs && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                <p className="text-xs font-medium text-orange-700 mb-1">Avarias:</p>
-                <p className="text-xs text-orange-700">{obs}</p>
-              </div>
-            )}
-            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>}
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("checklist")} className="flex-1 h-12" disabled={loading}>Voltar</Button>
-              <Button onClick={submitOrder} disabled={loading} className="flex-1 h-12 text-base" variant="success">
-                {loading ? "Registrando..." : "Confirmar Entrada"}
-              </Button>
             </div>
-          </CardContent>
-        </Card>
+          )}
+
+          {obs && (
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
+              <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-1">Avarias</p>
+              <p className="text-sm text-orange-700">{obs}</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm">{error}</div>
+          )}
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep("checklist")} className="h-14 px-5 rounded-xl" disabled={loading}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={submitOrder}
+              disabled={loading}
+              className="flex-1 h-14 text-base rounded-xl"
+              variant="success"
+            >
+              {loading ? (
+                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Registrando...</>
+              ) : (
+                "✓ Confirmar Entrada"
+              )}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
