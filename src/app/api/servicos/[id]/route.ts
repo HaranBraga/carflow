@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
 
-const VEHICLE_CATEGORIES = [
-  "POPULAR", "SUV_MEDIO", "SUV_GRANDE", "CAMIONETE",
-  "VAN_CAMINHAO", "MOTO", "TAPETE_RESIDENCIAL",
-] as const;
-
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
   description: z.string().nullable().optional(),
@@ -16,7 +11,7 @@ const updateSchema = z.object({
   isOpportunityOnly: z.boolean().optional(),
   active: z.boolean().optional(),
   prices: z.array(z.object({
-    category: z.enum(VEHICLE_CATEGORIES),
+    category: z.string().min(1),
     price: z.number().nonnegative(),
   })).optional(),
 });

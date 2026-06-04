@@ -43,7 +43,7 @@ export default function HistoricoPage() {
                   <p className="font-semibold">{order.vehicle.customer.name}</p>
                   <p className="text-xs text-muted-foreground">
                     <span className="font-mono">{order.vehicle.plate}</span>
-                    {" · "}{VEHICLE_CATEGORY_LABELS[order.vehicle.category]}
+                    {" · "}{VEHICLE_CATEGORY_LABELS[order.vehicle.category] || order.vehicle.category}
                     {order.items?.length > 0 && " · " + order.items.map((i: any) => i.service.name).join(", ")}
                   </p>
                 </div>

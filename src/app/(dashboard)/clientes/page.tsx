@@ -114,7 +114,7 @@ export default function ClientesPage() {
                           <div className="flex gap-2 mt-2 flex-wrap">
                             {c.vehicles.map((v: any) => (
                               <Badge key={v.id} variant="outline" className="font-mono text-xs">
-                                {v.plate} · {VEHICLE_CATEGORY_LABELS[v.category]}
+                                {v.plate} · {VEHICLE_CATEGORY_LABELS[v.category] || v.category}
                               </Badge>
                             ))}
                           </div>
@@ -408,7 +408,7 @@ function CustomerHistory({ customerId }: { customerId: string }) {
           <div className="flex items-center justify-between gap-2">
             <div>
               <span className="font-mono font-bold text-sm">{order.vehicle.plate}</span>
-              <span className="text-xs text-muted-foreground ml-2">{VEHICLE_CATEGORY_LABELS[order.vehicle.category]}</span>
+              <span className="text-xs text-muted-foreground ml-2">{VEHICLE_CATEGORY_LABELS[order.vehicle.category] || order.vehicle.category}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ORDER_STATUS_COLORS[order.status]}`}>

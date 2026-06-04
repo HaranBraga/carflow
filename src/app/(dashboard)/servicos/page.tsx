@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, VEHICLE_CATEGORY_LABELS } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
-const VEHICLE_CATEGORIES = Object.keys(VEHICLE_CATEGORY_LABELS);
+type VehicleType = { id: string; key: string; label: string; order: number };
 
 type CategoryPrice = { category: string; price: string; enabled: boolean };
 
@@ -25,35 +25,47 @@ type ServiceData = {
   prices: { id: string; category: string; price: number }[];
 };
 
-const emptyForm = {
-  name: "",
-  description: "",
-  basePrice: "",
-  pricingType: "FIXED" as "FIXED" | "PER_M2",
-  isOpportunityOnly: false,
-  prices: VEHICLE_CATEGORIES.map((c) => ({ category: c, price: "", enabled: false })) as CategoryPrice[],
-  samePriceAll: true,
-};
+function makeEmptyForm(types: VehicleType[]) {
+  return {
+    name: "",
+    description: "",
+    basePrice: "",
+    pricingType: "FIXED" as "FIXED" | "PER_M2",
+    isOpportunityOnly: false,
+    prices: types.map((t) => ({ category: t.key, price: "", enabled: false })) as CategoryPrice[],
+    samePriceAll: true,
+  };
+}
 
 export default function ServicosPage() {
   const [services, setServices] = useState<ServiceData[]>([]);
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(makeEmptyForm([]));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  async function fetchServices() {
-    const res = await fetch("/api/servicos");
-    setServices(await res.json());
+  async function fetchAll() {
+    const [srvRes, typesRes] = await Promise.all([
+      fetch("/api/servicos"),
+      fetch("/api/tipos-veiculo"),
+    ]);
+    const [svcs, types] = await Promise.all([srvRes.json(), typesRes.json()]);
+    setServices(svcs);
+    setVehicleTypes(types);
     setLoading(false);
   }
 
-  useEffect(() => { fetchServices(); }, []);
+  useEffect(() => { fetchAll(); }, []);
+
+  function labelFor(key: string) {
+    return vehicleTypes.find((t) => t.key === key)?.label ?? key;
+  }
 
   function openCreate() {
-    setForm(emptyForm);
+    setForm(makeEmptyForm(vehicleTypes));
     setEditingId(null);
     setError("");
     setDialogOpen(true);
@@ -68,10 +80,10 @@ export default function ServicosPage() {
       basePrice: String(svc.basePrice),
       pricingType: (svc.pricingType as "FIXED" | "PER_M2") ?? "FIXED",
       isOpportunityOnly: svc.isOpportunityOnly ?? false,
-      prices: VEHICLE_CATEGORIES.map((c) => ({
-        category: c,
-        price: priceByCat[c] !== undefined ? String(priceByCat[c]) : "",
-        enabled: priceByCat[c] !== undefined,
+      prices: vehicleTypes.map((t) => ({
+        category: t.key,
+        price: priceByCat[t.key] !== undefined ? String(priceByCat[t.key]) : "",
+        enabled: priceByCat[t.key] !== undefined,
       })),
       samePriceAll: svc.prices.length === 0,
     });
@@ -140,15 +152,14 @@ export default function ServicosPage() {
     }
 
     setDialogOpen(false);
-    setForm(emptyForm);
     setEditingId(null);
-    fetchServices();
+    fetchAll();
   }
 
   async function deleteService(id: string, name: string) {
     if (!confirm(`Desativar serviço "${name}"?`)) return;
     await fetch(`/api/servicos/${id}`, { method: "DELETE" });
-    fetchServices();
+    fetchAll();
   }
 
   return (
@@ -198,7 +209,7 @@ export default function ServicosPage() {
                           <div className="mt-2 flex flex-wrap gap-1">
                             {s.prices.map((p) => (
                               <Badge key={p.id} variant="outline" className="text-xs">
-                                {VEHICLE_CATEGORY_LABELS[p.category]}: {formatCurrency(Number(p.price))}
+                                {labelFor(p.category)}: {formatCurrency(Number(p.price))}
                               </Badge>
                             ))}
                           </div>
@@ -221,7 +232,11 @@ export default function ServicosPage() {
         </TabsContent>
 
         <TabsContent value="tipos" className="mt-4">
-          <TiposDeVeiculo services={services} onRefresh={fetchServices} />
+          <TiposDeVeiculo
+            vehicleTypes={vehicleTypes}
+            services={services}
+            onRefresh={fetchAll}
+          />
         </TabsContent>
       </Tabs>
 
@@ -237,27 +252,15 @@ export default function ServicosPage() {
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Lavagem Simples" required />
               </div>
               <div>
-                <Label>Tipo de cobrança</Label>
-                <select
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
-                  value={form.pricingType}
-                  onChange={(e) => setForm({ ...form, pricingType: e.target.value as "FIXED" | "PER_M2" })}
-                >
-                  <option value="FIXED">Preço fixo</option>
-                  <option value="PER_M2">Por m² (tapete)</option>
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <Label>Preço base * {form.pricingType === "PER_M2" && <span className="text-muted-foreground text-xs">(por m²)</span>}</Label>
+                <Label>Preço base *</Label>
                 <Input type="number" step="0.01" min="0" value={form.basePrice}
                   onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
                   placeholder="0,00" required />
               </div>
-            </div>
-
-            <div>
-              <Label>Descrição</Label>
-              <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição do serviço" />
+              <div className="md:col-span-2">
+                <Label>Descrição</Label>
+                <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição do serviço" />
+              </div>
             </div>
 
             <label className="flex items-center gap-3 cursor-pointer">
@@ -290,7 +293,7 @@ export default function ServicosPage() {
                     <div key={p.category} className="flex items-center gap-3">
                       <label className="flex items-center gap-2 flex-1 cursor-pointer">
                         <input type="checkbox" checked={p.enabled} onChange={() => toggleCategory(p.category)} />
-                        <span className="text-sm">{VEHICLE_CATEGORY_LABELS[p.category]}</span>
+                        <span className="text-sm">{labelFor(p.category)}</span>
                       </label>
                       <Input
                         type="number" step="0.01" min="0"
@@ -323,39 +326,68 @@ export default function ServicosPage() {
   );
 }
 
-function TiposDeVeiculo({ services, onRefresh }: { services: ServiceData[]; onRefresh: () => void }) {
-  const [labels, setLabels] = useState<Record<string, string>>({});
-  const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [labelValue, setLabelValue] = useState("");
+function TiposDeVeiculo({
+  vehicleTypes,
+  services,
+  onRefresh,
+}: {
+  vehicleTypes: VehicleType[];
+  services: ServiceData[];
+  onRefresh: () => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
   const [savingLabel, setSavingLabel] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [addingType, setAddingType] = useState(false);
+  const [typeError, setTypeError] = useState("");
   const [editingPrice, setEditingPrice] = useState<{ serviceId: string; category: string } | null>(null);
   const [priceValue, setPriceValue] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/categorias-veiculo")
-      .then((r) => r.json())
-      .then((data: { category: string; label: string }[]) => {
-        const map: Record<string, string> = {};
-        data.forEach((d) => { map[d.category] = d.label; });
-        setLabels(map);
-      });
-  }, []);
-
-  function getLabel(cat: string) {
-    return labels[cat] || VEHICLE_CATEGORY_LABELS[cat] || cat;
+  function labelFor(key: string) {
+    return vehicleTypes.find((t) => t.key === key)?.label ?? key;
   }
 
-  async function saveLabel(category: string) {
+  async function saveLabel(id: string) {
     setSavingLabel(true);
-    await fetch("/api/categorias-veiculo", {
+    await fetch("/api/tipos-veiculo", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify([{ category, label: labelValue }]),
+      body: JSON.stringify({ id, label: editLabel }),
     });
-    setLabels((prev) => ({ ...prev, [category]: labelValue }));
-    setEditingLabel(null);
+    setEditingId(null);
     setSavingLabel(false);
+    onRefresh();
+  }
+
+  async function addType() {
+    if (!newLabel.trim()) return;
+    setAddingType(true);
+    setTypeError("");
+    const res = await fetch("/api/tipos-veiculo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: newLabel.trim() }),
+    });
+    setAddingType(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setTypeError(data.error || "Erro ao adicionar");
+      return;
+    }
+    setNewLabel("");
+    onRefresh();
+  }
+
+  async function deleteType(id: string) {
+    const res = await fetch(`/api/tipos-veiculo?id=${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Erro ao excluir tipo");
+      return;
+    }
+    onRefresh();
   }
 
   async function savePrice() {
@@ -391,58 +423,86 @@ function TiposDeVeiculo({ services, onRefresh }: { services: ServiceData[]; onRe
     onRefresh();
   }
 
-  const servicesByCategory = VEHICLE_CATEGORIES.map((cat) => ({
-    category: cat,
-    services: services.filter((s) => s.prices.length === 0 || s.prices.some((p) => p.category === cat)),
+  const servicesByCategory = vehicleTypes.map((t) => ({
+    type: t,
+    services: services.filter((s) => s.prices.length === 0 || s.prices.some((p) => p.category === t.key)),
   }));
 
   return (
     <div className="space-y-4">
-      {/* Edição de nomes */}
+      {/* Gerenciar tipos */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Nomes exibidos</CardTitle>
-          <p className="text-xs text-muted-foreground">Personalize o nome de cada tipo de veículo</p>
+          <CardTitle className="text-sm">Tipos de Veículo</CardTitle>
+          <p className="text-xs text-muted-foreground">Adicione, renomeie ou remova tipos conforme sua operação</p>
         </CardHeader>
         <CardContent className="space-y-2">
-          {VEHICLE_CATEGORIES.map((cat) => (
-            <div key={cat} className="flex items-center gap-2">
-              {editingLabel === cat ? (
+          {vehicleTypes.map((t) => (
+            <div key={t.id} className="flex items-center gap-2">
+              {editingId === t.id ? (
                 <>
                   <Input
                     className="flex-1 h-8"
-                    value={labelValue}
-                    onChange={(e) => setLabelValue(e.target.value)}
+                    value={editLabel}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveLabel(t.id); if (e.key === "Escape") setEditingId(null); }}
+                    autoFocus
                   />
-                  <Button size="sm" className="h-8 w-8 p-0" onClick={() => saveLabel(cat)} disabled={savingLabel}>
+                  <Button size="sm" className="h-8 w-8 p-0" onClick={() => saveLabel(t.id)} disabled={savingLabel}>
                     <Check className="w-3 h-3" />
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingLabel(null)}>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingId(null)}>
                     <X className="w-3 h-3" />
                   </Button>
                 </>
               ) : (
                 <>
-                  <span className="flex-1 text-sm">{getLabel(cat)}</span>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
-                    onClick={() => { setEditingLabel(cat); setLabelValue(getLabel(cat)); }}>
+                  <span className="flex-1 text-sm">{t.label}</span>
+                  <Button
+                    size="sm" variant="ghost" className="h-7 w-7 p-0"
+                    onClick={() => { setEditingId(t.id); setEditLabel(t.label); }}
+                    title="Renomear"
+                  >
                     <Pencil className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                    onClick={() => { if (confirm(`Excluir tipo "${t.label}"?`)) deleteType(t.id); }}
+                    title="Excluir"
+                  >
+                    <Trash2 className="w-3 h-3" />
                   </Button>
                 </>
               )}
             </div>
           ))}
+
+          {/* Adicionar novo tipo */}
+          <div className="flex items-center gap-2 pt-2 border-t mt-2">
+            <Input
+              className="flex-1 h-8"
+              placeholder="Nome do novo tipo..."
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addType(); }}
+            />
+            <Button size="sm" className="h-8 shrink-0" onClick={addType} disabled={addingType || !newLabel.trim()}>
+              <Plus className="w-3 h-3 mr-1" />
+              Adicionar
+            </Button>
+          </div>
+          {typeError && <p className="text-xs text-destructive">{typeError}</p>}
         </CardContent>
       </Card>
 
       {/* Serviços por tipo com edição de preço */}
       <p className="text-sm font-medium text-muted-foreground">Serviços e preços por tipo</p>
       <div className="grid md:grid-cols-2 gap-3">
-        {servicesByCategory.map(({ category, services: applicable }) => (
-          <Card key={category}>
+        {servicesByCategory.map(({ type, services: applicable }) => (
+          <Card key={type.id}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center justify-between">
-                {getLabel(category)}
+                {type.label}
                 <Badge variant="secondary" className="ml-auto">{applicable.length}</Badge>
               </CardTitle>
             </CardHeader>
@@ -452,13 +512,13 @@ function TiposDeVeiculo({ services, onRefresh }: { services: ServiceData[]; onRe
               ) : (
                 <ul className="space-y-2">
                   {applicable.map((svc) => {
-                    const catPrice = svc.prices.find((p) => p.category === category);
+                    const catPrice = svc.prices.find((p) => p.category === type.key);
                     const price = catPrice ? Number(catPrice.price) : Number(svc.basePrice);
-                    const isEditing = editingPrice?.serviceId === svc.id && editingPrice?.category === category;
+                    const isEditing = editingPrice?.serviceId === svc.id && editingPrice?.category === type.key;
 
                     return (
                       <li key={svc.id} className="flex items-center gap-2 text-sm">
-                        <span className="flex-1 truncate">{svc.name}{svc.pricingType === "PER_M2" ? " (m²)" : ""}</span>
+                        <span className="flex-1 truncate">{svc.name}</span>
                         {isEditing ? (
                           <div className="flex items-center gap-1 shrink-0">
                             <Input
@@ -478,7 +538,7 @@ function TiposDeVeiculo({ services, onRefresh }: { services: ServiceData[]; onRe
                           <div className="flex items-center gap-1 shrink-0">
                             <span className="font-medium text-xs">{formatCurrency(price)}</span>
                             <Button size="sm" variant="ghost" className="h-6 w-6 p-0"
-                              onClick={() => { setEditingPrice({ serviceId: svc.id, category }); setPriceValue(String(price)); }}>
+                              onClick={() => { setEditingPrice({ serviceId: svc.id, category: type.key }); setPriceValue(String(price)); }}>
                               <Pencil className="w-3 h-3" />
                             </Button>
                           </div>

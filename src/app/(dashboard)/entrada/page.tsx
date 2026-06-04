@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { VEHICLE_CATEGORY_LABELS, formatPhone, formatCurrency } from "@/lib/utils";
+import { formatPhone, formatCurrency } from "@/lib/utils";
 import { PlateScanner } from "@/components/plate-scanner";
+
+type VehicleType = { id: string; key: string; label: string };
 
 type Step = "placa" | "cliente" | "servicos" | "checklist" | "confirmacao";
 
@@ -73,6 +75,19 @@ export default function EntradaPage() {
   const [opportunities, setOpportunities] = useState<string[]>([]);
   const [orderNotes, setOrderNotes] = useState("");
   const [phoneSearching, setPhoneSearching] = useState(false);
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+
+  useEffect(() => {
+    fetch("/api/tipos-veiculo")
+      .then((r) => r.json())
+      .then((data) => {
+        setVehicleTypes(data);
+        if (data.length > 0) {
+          setVehicle((v) => ({ ...v, category: v.category || data[0].key }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const stepIndex = STEPS.findIndex((s) => s.key === step);
 
@@ -351,7 +366,7 @@ export default function EntradaPage() {
                   <p className="font-semibold text-green-800 text-sm">Veículo encontrado</p>
                 </div>
                 <p className="text-sm font-medium">{existingVehicle.model}{existingVehicle.color ? ` · ${existingVehicle.color}` : ""}</p>
-                <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[existingVehicle.category]}</p>
+                <p className="text-xs text-muted-foreground">{vehicleTypes.find((t) => t.key === existingVehicle.category)?.label ?? existingVehicle.category}</p>
                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-green-200">
                   <User className="w-3.5 h-3.5 text-green-700" />
                   <p className="text-sm text-green-800"><strong>{existingVehicle.customer?.name}</strong> · {formatPhone(existingVehicle.customer?.phone || "")}</p>
@@ -372,8 +387,8 @@ export default function EntradaPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(VEHICLE_CATEGORY_LABELS).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      {vehicleTypes.map((t) => (
+                        <SelectItem key={t.key} value={t.key}>{t.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -517,7 +532,7 @@ export default function EntradaPage() {
           <div className="bg-card rounded-2xl border p-4 space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                {VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}
+                {vehicleTypes.find((t) => t.key === (vehicle.category || existingVehicle?.category))?.label ?? (vehicle.category || existingVehicle?.category)}
               </p>
               {services.length > 0 && (
                 <Badge variant="secondary">{services.length} selecionado{services.length > 1 ? "s" : ""}</Badge>
@@ -673,7 +688,7 @@ export default function EntradaPage() {
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Veículo</p>
               <p className="font-bold font-mono text-lg">{vehicle.plate || plateInput}</p>
               <p className="text-sm">{vehicle.model} {vehicle.color}</p>
-              <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[vehicle.category || existingVehicle?.category]}</p>
+              <p className="text-xs text-muted-foreground">{vehicleTypes.find((t) => t.key === (vehicle.category || existingVehicle?.category))?.label ?? (vehicle.category || existingVehicle?.category)}</p>
             </div>
             <div className="bg-card border rounded-2xl p-4 space-y-1">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Cliente</p>

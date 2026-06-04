@@ -9,7 +9,7 @@ const vehicleSchema = z.object({
   model: z.string().default(""),
   brand: z.string().optional().default(""),
   color: z.string().optional().default(""),
-  category: z.enum(["POPULAR", "SUV_MEDIO", "SUV_GRANDE", "CAMIONETE", "VAN_CAMINHAO", "MOTO", "TAPETE_RESIDENCIAL"]),
+  category: z.string().min(1),
 });
 
 export async function GET(req: NextRequest) {

@@ -1,31 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantPrisma } from "@/lib/prisma-tenant";
 
-const DEFAULTS: Record<string, string> = {
-  POPULAR: "Carro Popular",
-  SUV_MEDIO: "SUV Médio",
-  SUV_GRANDE: "SUV Grande",
-  CAMIONETE: "Camionete",
-  VAN_CAMINHAO: "Van / Caminhão",
-  MOTO: "Moto",
-  TAPETE_RESIDENCIAL: "Tapete Residencial",
-};
-
 export async function GET() {
   let prisma;
   try { ({ prisma } = await getTenantPrisma()); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
-  const saved = await prisma.vehicleCategoryLabel.findMany();
-  const savedMap: Record<string, string> = {};
-  saved.forEach((r) => { savedMap[r.category] = r.label; });
-
-  const result = Object.entries(DEFAULTS).map(([category, defaultLabel]) => ({
-    category,
-    label: savedMap[category] ?? defaultLabel,
-  }));
-
-  return NextResponse.json(result);
+  const types = await prisma.vehicleType.findMany({
+    where: { active: true },
+    orderBy: { order: "asc" },
+  });
+  return NextResponse.json(types.map((t) => ({ category: t.key, label: t.label })));
 }
 
 export async function PUT(req: NextRequest) {
@@ -36,12 +21,10 @@ export async function PUT(req: NextRequest) {
   const updates: { category: string; label: string }[] = await req.json();
 
   for (const { category, label } of updates) {
-    if (!DEFAULTS[category]) continue;
-    await prisma.vehicleCategoryLabel.upsert({
-      where: { category },
-      update: { label },
-      create: { category, label },
-    });
+    await prisma.vehicleType.updateMany({
+      where: { key: category },
+      data: { label },
+    }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true });

@@ -96,7 +96,7 @@ export default async function DashboardPage() {
                     <p className="font-medium text-sm">{order.vehicle.customer.name}</p>
                     <p className="text-xs font-mono text-muted-foreground">{order.vehicle.plate}</p>
                     <p className="text-xs text-muted-foreground">
-                      {VEHICLE_CATEGORY_LABELS[order.vehicle.category]} • {format(order.arrivedAt, "HH:mm")}
+                      {VEHICLE_CATEGORY_LABELS[order.vehicle.category] || order.vehicle.category} • {format(order.arrivedAt, "HH:mm")}
                     </p>
                   </div>
                   <div className="text-right">

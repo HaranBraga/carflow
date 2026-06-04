@@ -334,7 +334,7 @@ function OrderCard({ order, onStatusChange, onFinishAndSend, onModal, sending }:
           <div>
             <p className="font-bold text-lg font-mono">{order.vehicle.plate}</p>
             <p className="text-sm font-medium">{order.vehicle.customer.name}</p>
-            <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[order.vehicle.category]}</p>
+            <p className="text-xs text-muted-foreground">{VEHICLE_CATEGORY_LABELS[order.vehicle.category] || order.vehicle.category}</p>
           </div>
           <div className="text-right">
             <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${ORDER_STATUS_COLORS[order.status]}`}>

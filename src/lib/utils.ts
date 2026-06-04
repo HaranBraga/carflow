@@ -28,7 +28,6 @@ export const VEHICLE_CATEGORY_LABELS: Record<string, string> = {
   CAMIONETE: "Camionete",
   VAN_CAMINHAO: "Van / Caminhão",
   MOTO: "Moto",
-  TAPETE_RESIDENCIAL: "Tapete Residencial",
 };
 
 export const GENDER_LABELS: Record<string, string> = {
