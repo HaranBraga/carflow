@@ -6,7 +6,7 @@ const cashFlowSchema = z.object({
   type: z.enum(["INCOME", "EXPENSE"]),
   category: z.string(),
   categoryId: z.string().optional(),
-  description: z.string(),
+  description: z.string().optional().default(""),
   amount: z.number().positive(),
   expenseType: z.enum(["MENSAL", "DIARIA", "INSUMOS"]).optional(),
 });

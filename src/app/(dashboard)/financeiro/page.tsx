@@ -769,9 +769,9 @@ export default function FinanceiroPage() {
                   setEntryForm({ ...entryForm, expenseType: v as ExpenseType })}>
                   <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MENSAL">🗓 Mensal</SelectItem>
-                    <SelectItem value="DIARIA">☀️ Diária</SelectItem>
-                    <SelectItem value="INSUMOS">🧴 Insumos</SelectItem>
+                    <SelectItem value="MENSAL">Mensal</SelectItem>
+                    <SelectItem value="DIARIA">Diária</SelectItem>
+                    <SelectItem value="INSUMOS">Insumos</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -793,8 +793,8 @@ export default function FinanceiroPage() {
 
             <div>
               <Label>Descrição *</Label>
-              <Input value={entryForm.description}
-                onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} required />
+              <Input value={entryForm.description} placeholder="Opcional"
+                onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} />
             </div>
             <div>
               <Label>Valor (R$) *</Label>
@@ -837,9 +837,9 @@ export default function FinanceiroPage() {
                   setCatForm({ ...catForm, expenseType: v as ExpenseType })}>
                   <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MENSAL">🗓 Mensal</SelectItem>
-                    <SelectItem value="DIARIA">☀️ Diária</SelectItem>
-                    <SelectItem value="INSUMOS">🧴 Insumos</SelectItem>
+                    <SelectItem value="MENSAL">Mensal</SelectItem>
+                    <SelectItem value="DIARIA">Diária</SelectItem>
+                    <SelectItem value="INSUMOS">Insumos</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
