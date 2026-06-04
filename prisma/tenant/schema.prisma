@@ -220,10 +220,11 @@ model WasherPayment {
 }
 
 model CashFlowCategory {
-  id     String       @id @default(cuid())
-  name   String
-  type   CashFlowType
-  active Boolean      @default(true)
+  id          String       @id @default(cuid())
+  name        String
+  type        CashFlowType
+  expenseType ExpenseType?
+  active      Boolean      @default(true)
 
   cashFlows CashFlow[]
 
@@ -231,16 +232,17 @@ model CashFlowCategory {
 }
 
 model CashFlow {
-  id          String    @id @default(cuid())
-  date        DateTime  @default(now())
+  id          String       @id @default(cuid())
+  date        DateTime     @default(now())
   type        CashFlowType
   category    String
   categoryId  String?
   description String
-  amount      Decimal   @db.Decimal(10, 2)
+  amount      Decimal      @db.Decimal(10, 2)
+  expenseType ExpenseType?
   orderId     String?
-  closed      Boolean   @default(false)
-  createdAt   DateTime  @default(now())
+  closed      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
 
   cashFlowCategory CashFlowCategory? @relation(fields: [categoryId], references: [id])
   washerPayments   WasherPayment[]
@@ -251,6 +253,12 @@ model CashFlow {
 enum CashFlowType {
   INCOME
   EXPENSE
+}
+
+enum ExpenseType {
+  MENSAL
+  DIARIA
+  INSUMOS
 }
 
 model Feedback {

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { z } from "zod";
+
+const schema = z.object({
+  name: z.string().min(2).optional(),
+  expenseType: z.enum(["MENSAL", "DIARIA", "INSUMOS"]).nullable().optional(),
+});
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let prisma;
@@ -7,8 +13,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const { id } = await params;
-  const { name } = await req.json();
-  const cat = await prisma.cashFlowCategory.update({ where: { id }, data: { name } });
+  const data = schema.parse(await req.json());
+  const cat = await prisma.cashFlowCategory.update({ where: { id }, data });
   return NextResponse.json(cat);
 }
 

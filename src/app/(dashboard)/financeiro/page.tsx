@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   DollarSign, Plus, TrendingUp, TrendingDown, Minus, Tag,
   Pencil, Trash2, UserCheck, Check, Loader2, Banknote,
+  CalendarDays, CalendarRange, Package, ReceiptText, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +17,23 @@ import { formatCurrency, formatPhone, cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-type Category = { id: string; name: string; type: "INCOME" | "EXPENSE" };
+type ExpenseType = "MENSAL" | "DIARIA" | "INSUMOS";
+type Category = {
+  id: string; name: string; type: "INCOME" | "EXPENSE"; expenseType: ExpenseType | null;
+};
 type Entry = {
   id: string; date: string; type: "INCOME" | "EXPENSE";
-  category: string; description: string; amount: number; orderId?: string | null;
+  category: string; description: string; amount: number;
+  orderId?: string | null; expenseType?: ExpenseType | null;
+};
+type CashData = {
+  entries: Entry[];
+  totalIncome: number;
+  totalExpense: number;
+  balance: number;
+  expenseBreakdown: Record<string, number>;
+  period: string;
+  dateStr: string;
 };
 type WasherPaymentRecord = {
   id: string; amount: number; days: number; bonus: number; date: string; notes: string | null;
@@ -32,16 +46,39 @@ type Washer = {
 };
 type PaymentInput = { days: number; dailyRate: number; bonus: number };
 
+const EXPENSE_TYPE_LABELS: Record<ExpenseType, string> = {
+  MENSAL: "Mensal",
+  DIARIA: "Diária",
+  INSUMOS: "Insumos",
+};
+const EXPENSE_TYPE_COLORS: Record<ExpenseType, string> = {
+  MENSAL: "bg-purple-50 text-purple-700 border-purple-200",
+  DIARIA: "bg-orange-50 text-orange-700 border-orange-200",
+  INSUMOS: "bg-teal-50 text-teal-700 border-teal-200",
+};
+const EXPENSE_TYPE_CARD: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
+  MENSAL: { label: "Mensal", icon: CalendarRange, color: "text-purple-600", bg: "bg-purple-50" },
+  DIARIA: { label: "Diária", icon: Clock, color: "text-orange-600", bg: "bg-orange-50" },
+  INSUMOS: { label: "Insumos", icon: Package, color: "text-teal-600", bg: "bg-teal-50" },
+  OUTRO: { label: "Outros", icon: ReceiptText, color: "text-gray-600", bg: "bg-gray-50" },
+};
+
 const emptyWasherForm = { name: "", phone: "", cpf: "", dailyRate: "" };
 
 export default function FinanceiroPage() {
   const [tab, setTab] = useState("lancamentos");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+
+  // Period state
+  const [period, setPeriod] = useState<"day" | "month">("day");
+  const [dayDate, setDayDate] = useState(new Date().toISOString().split("T")[0]);
+  const [monthDate, setMonthDate] = useState(new Date().toISOString().slice(0, 7));
 
   // Lançamentos
-  const [cashData, setCashData] = useState<{
-    entries: Entry[]; totalIncome: number; totalExpense: number; balance: number;
-  }>({ entries: [], totalIncome: 0, totalExpense: 0, balance: 0 });
+  const [cashData, setCashData] = useState<CashData>({
+    entries: [], totalIncome: 0, totalExpense: 0, balance: 0,
+    expenseBreakdown: { MENSAL: 0, DIARIA: 0, INSUMOS: 0, OUTRO: 0 },
+    period: "day", dateStr: "",
+  });
   const [cashLoading, setCashLoading] = useState(true);
 
   // Categorias
@@ -52,21 +89,31 @@ export default function FinanceiroPage() {
   const [washersLoaded, setWashersLoaded] = useState(false);
   const [washersLoading, setWashersLoading] = useState(false);
 
-  // Pagar Diária — selected[washerId] = { days, dailyRate, bonus }
+  // Pagar Diária
   const [selected, setSelected] = useState<Record<string, PaymentInput>>({});
   const [paying, setPaying] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
 
-  // Dialogs: lançamento
+  // Dialog: lançamento
   const [entryDialog, setEntryDialog] = useState(false);
-  const [entryForm, setEntryForm] = useState({ type: "INCOME", categoryId: "", description: "", amount: "" });
+  const [entryForm, setEntryForm] = useState({
+    type: "INCOME" as "INCOME" | "EXPENSE",
+    categoryId: "",
+    description: "",
+    amount: "",
+    expenseType: "" as ExpenseType | "",
+  });
 
-  // Dialogs: categoria
+  // Dialog: categoria
   const [catDialog, setCatDialog] = useState(false);
-  const [catForm, setCatForm] = useState({ name: "", type: "INCOME" as "INCOME" | "EXPENSE" });
+  const [catForm, setCatForm] = useState({
+    name: "",
+    type: "INCOME" as "INCOME" | "EXPENSE",
+    expenseType: "" as ExpenseType | "",
+  });
   const [editingCat, setEditingCat] = useState<Category | null>(null);
 
-  // Dialogs: lavador
+  // Dialog: lavador
   const [washerDialog, setWasherDialog] = useState(false);
   const [washerForm, setWasherForm] = useState(emptyWasherForm);
   const [editingWasherId, setEditingWasherId] = useState<string | null>(null);
@@ -74,12 +121,14 @@ export default function FinanceiroPage() {
 
   // ── Data fetching ──
 
-  const loadCash = useCallback(async (d = date) => {
+  const effectiveDateStr = period === "month" ? monthDate : dayDate;
+
+  const loadCash = useCallback(async (p = period, d = effectiveDateStr) => {
     setCashLoading(true);
-    const res = await fetch(`/api/caixa?date=${d}`);
+    const res = await fetch(`/api/caixa?period=${p}&date=${d}`);
     if (res.ok) setCashData(await res.json());
     setCashLoading(false);
-  }, [date]);
+  }, [period, effectiveDateStr]);
 
   const loadCategories = useCallback(async () => {
     const res = await fetch("/api/financeiro/categorias");
@@ -97,7 +146,7 @@ export default function FinanceiroPage() {
   }, []);
 
   useEffect(() => { loadCash(); loadCategories(); }, []);
-  useEffect(() => { loadCash(date); }, [date]);
+  useEffect(() => { loadCash(period, effectiveDateStr); }, [period, dayDate, monthDate]);
   useEffect(() => {
     if ((tab === "pagar-diaria" || tab === "lavadores") && !washersLoaded) {
       loadWashers();
@@ -116,20 +165,15 @@ export default function FinanceiroPage() {
       }
       return {
         ...prev,
-        [washer.id]: {
-          days: 1,
-          dailyRate: washer.dailyRate ? Number(washer.dailyRate) : 0,
-          bonus: 0,
-        },
+        [washer.id]: { days: 1, dailyRate: washer.dailyRate ? Number(washer.dailyRate) : 0, bonus: 0 },
       };
     });
   }
 
   function updatePayment(washerId: string, field: keyof PaymentInput, raw: string) {
-    const value = parseFloat(raw) || 0;
     setSelected((prev) => ({
       ...prev,
-      [washerId]: { ...prev[washerId], [field]: value },
+      [washerId]: { ...prev[washerId], [field]: parseFloat(raw) || 0 },
     }));
   }
 
@@ -139,31 +183,29 @@ export default function FinanceiroPage() {
     setPaying(true);
     setPaySuccess(false);
     try {
-      const payments = entries.map(([washerId, p]) => ({
-        washerId,
-        days: p.days,
-        dailyRate: p.dailyRate,
-        bonus: p.bonus,
-      }));
       const res = await fetch("/api/lavadores/pagar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payments }),
+        body: JSON.stringify({
+          payments: entries.map(([washerId, p]) => ({
+            washerId, days: p.days, dailyRate: p.dailyRate, bonus: p.bonus,
+          })),
+        }),
       });
       if (res.ok) {
         setSelected({});
         setPaySuccess(true);
-        await Promise.all([loadWashers(), loadCash(date)]);
+        await Promise.all([loadWashers(), loadCash()]);
       }
     } finally {
       setPaying(false);
     }
   }
 
-  const totalToPay = Object.entries(selected).reduce((sum, [, p]) => {
-    return sum + (p.days || 0) * (p.dailyRate || 0) + (p.bonus || 0);
-  }, 0);
-
+  const totalToPay = Object.values(selected).reduce(
+    (sum, p) => sum + (p.days || 0) * (p.dailyRate || 0) + (p.bonus || 0),
+    0
+  );
   const selectedCount = Object.keys(selected).length;
 
   // ── Lançamentos ──
@@ -177,34 +219,41 @@ export default function FinanceiroPage() {
       body: JSON.stringify({
         type: entryForm.type,
         category: cat?.name || "Geral",
+        categoryId: entryForm.categoryId || undefined,
         description: entryForm.description,
         amount: parseFloat(entryForm.amount),
+        expenseType: entryForm.expenseType || undefined,
       }),
     });
     setEntryDialog(false);
-    setEntryForm({ type: "INCOME", categoryId: "", description: "", amount: "" });
-    loadCash(date);
+    setEntryForm({ type: "INCOME", categoryId: "", description: "", amount: "", expenseType: "" });
+    loadCash();
   }
 
   // ── Categorias ──
 
   async function saveCategory(e: React.FormEvent) {
     e.preventDefault();
+    const body = {
+      name: catForm.name,
+      type: catForm.type,
+      expenseType: catForm.type === "EXPENSE" && catForm.expenseType ? catForm.expenseType : undefined,
+    };
     if (editingCat) {
       await fetch(`/api/financeiro/categorias/${editingCat.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: catForm.name }),
+        body: JSON.stringify({ name: catForm.name, expenseType: body.expenseType ?? null }),
       });
     } else {
       await fetch("/api/financeiro/categorias", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(catForm),
+        body: JSON.stringify(body),
       });
     }
     setCatDialog(false);
-    setCatForm({ name: "", type: "INCOME" });
+    setCatForm({ name: "", type: "INCOME", expenseType: "" });
     setEditingCat(null);
     loadCategories();
   }
@@ -225,9 +274,7 @@ export default function FinanceiroPage() {
 
   function openEditWasher(w: Washer) {
     setWasherForm({
-      name: w.name,
-      phone: w.phone ?? "",
-      cpf: w.cpf ?? "",
+      name: w.name, phone: w.phone ?? "", cpf: w.cpf ?? "",
       dailyRate: w.dailyRate ? String(Number(w.dailyRate)) : "",
     });
     setEditingWasherId(w.id);
@@ -237,7 +284,7 @@ export default function FinanceiroPage() {
   async function saveWasher(e: React.FormEvent) {
     e.preventDefault();
     setWasherSaving(true);
-    const body: Record<string, unknown> = {
+    const body = {
       name: washerForm.name,
       phone: washerForm.phone || undefined,
       cpf: washerForm.cpf || undefined,
@@ -245,14 +292,12 @@ export default function FinanceiroPage() {
     };
     if (editingWasherId) {
       await fetch(`/api/lavadores/${editingWasherId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
     } else {
       await fetch("/api/lavadores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
     }
@@ -263,12 +308,24 @@ export default function FinanceiroPage() {
     loadWashers();
   }
 
+  // ── Computed ──
+
   const incomeCategories = categories.filter((c) => c.type === "INCOME");
   const expenseCategories = categories.filter((c) => c.type === "EXPENSE");
-
-  // Payments registered today visible in Lançamentos
   const dailyPaymentsToday = cashData.entries.filter((e) => e.category === "Diária Lavador");
+  const hasExpenseBreakdown = cashData.totalExpense > 0;
 
+  // ── Entry type auto-fill from category ──
+  function handleCategoryChange(catId: string) {
+    const cat = categories.find((c) => c.id === catId);
+    setEntryForm((prev) => ({
+      ...prev,
+      categoryId: catId,
+      expenseType: (cat?.expenseType as ExpenseType) || prev.expenseType,
+    }));
+  }
+
+  // ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -286,40 +343,88 @@ export default function FinanceiroPage() {
 
         {/* ─── LANÇAMENTOS ─── */}
         <TabsContent value="lancamentos" className="space-y-4 mt-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
-            <Button onClick={() => setEntryDialog(true)} className="gap-1">
+
+          {/* Controls row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Period toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              <button
+                onClick={() => setPeriod("day")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors",
+                  period === "day" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+                )}
+              >
+                <CalendarDays className="w-3.5 h-3.5" /> Dia
+              </button>
+              <button
+                onClick={() => setPeriod("month")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-l",
+                  period === "month" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+                )}
+              >
+                <CalendarRange className="w-3.5 h-3.5" /> Mês
+              </button>
+            </div>
+
+            {period === "day" ? (
+              <Input
+                type="date"
+                value={dayDate}
+                onChange={(e) => setDayDate(e.target.value)}
+                className="w-40"
+              />
+            ) : (
+              <Input
+                type="month"
+                value={monthDate}
+                onChange={(e) => setMonthDate(e.target.value)}
+                className="w-36"
+              />
+            )}
+
+            <Button onClick={() => setEntryDialog(true)} className="gap-1 ml-auto">
               <Plus className="w-4 h-4" /> Novo Lançamento
             </Button>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3">
             <Card>
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2 bg-green-50 rounded-lg"><TrendingUp className="w-5 h-5 text-green-600" /></div>
-                <div>
+                <div className="p-2 bg-green-50 rounded-lg shrink-0">
+                  <TrendingUp className="w-4 h-4 text-green-600" />
+                </div>
+                <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Receitas</p>
-                  <p className="text-lg font-bold text-green-600">{formatCurrency(cashData.totalIncome)}</p>
+                  <p className="text-base font-bold text-green-600 truncate">
+                    {formatCurrency(cashData.totalIncome)}
+                  </p>
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2 bg-red-50 rounded-lg"><TrendingDown className="w-5 h-5 text-red-600" /></div>
-                <div>
+                <div className="p-2 bg-red-50 rounded-lg shrink-0">
+                  <TrendingDown className="w-4 h-4 text-red-600" />
+                </div>
+                <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Despesas</p>
-                  <p className="text-lg font-bold text-red-600">{formatCurrency(cashData.totalExpense)}</p>
+                  <p className="text-base font-bold text-red-600 truncate">
+                    {formatCurrency(cashData.totalExpense)}
+                  </p>
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${cashData.balance >= 0 ? "bg-blue-50" : "bg-red-50"}`}>
-                  <Minus className={`w-5 h-5 ${cashData.balance >= 0 ? "text-blue-600" : "text-red-600"}`} />
+                <div className={`p-2 rounded-lg shrink-0 ${cashData.balance >= 0 ? "bg-blue-50" : "bg-red-50"}`}>
+                  <Minus className={`w-4 h-4 ${cashData.balance >= 0 ? "text-blue-600" : "text-red-600"}`} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Saldo</p>
-                  <p className={`text-lg font-bold ${cashData.balance >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                  <p className={`text-base font-bold truncate ${cashData.balance >= 0 ? "text-blue-600" : "text-red-600"}`}>
                     {formatCurrency(cashData.balance)}
                   </p>
                 </div>
@@ -327,34 +432,71 @@ export default function FinanceiroPage() {
             </Card>
           </div>
 
+          {/* Expense breakdown by type */}
+          {hasExpenseBreakdown && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2">
+                Despesas por tipo
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(["MENSAL", "DIARIA", "INSUMOS", "OUTRO"] as const).map((key) => {
+                  const val = cashData.expenseBreakdown[key] ?? 0;
+                  if (val === 0) return null;
+                  const meta = EXPENSE_TYPE_CARD[key];
+                  const Icon = meta.icon;
+                  return (
+                    <Card key={key} className="border">
+                      <CardContent className="p-3 flex items-center gap-2">
+                        <div className={`p-1.5 rounded-md ${meta.bg} shrink-0`}>
+                          <Icon className={`w-3.5 h-3.5 ${meta.color}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-muted-foreground">{meta.label}</p>
+                          <p className={`text-sm font-bold ${meta.color} truncate`}>
+                            {formatCurrency(val)}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Entry list */}
           <Card>
             <CardContent className="p-0">
               {cashLoading ? (
                 <p className="text-center text-muted-foreground py-8">Carregando...</p>
               ) : cashData.entries.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">Nenhum lançamento para este dia.</p>
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhum lançamento para {period === "month" ? "este mês" : "este dia"}.
+                </p>
               ) : (
                 <div className="divide-y">
                   {cashData.entries.map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between px-4 py-3">
-                      <div className="flex items-center gap-3">
+                    <div key={entry.id} className="flex items-center justify-between px-4 py-3 gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-2 h-2 rounded-full shrink-0 ${entry.type === "INCOME" ? "bg-green-500" : "bg-red-500"}`} />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium">{entry.description}</p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium truncate">{entry.description}</p>
                             {entry.orderId && (
-                              <Badge variant="outline" className="text-[10px] h-4 px-1">OS</Badge>
+                              <Badge variant="outline" className="text-[10px] h-4 px-1 shrink-0">OS</Badge>
                             )}
-                            {entry.category === "Diária Lavador" && (
-                              <Badge variant="secondary" className="text-[10px] h-4 px-1">Lavador</Badge>
+                            {entry.expenseType && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium shrink-0 ${EXPENSE_TYPE_COLORS[entry.expenseType]}`}>
+                                {EXPENSE_TYPE_LABELS[entry.expenseType]}
+                              </span>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {entry.category} · {format(new Date(entry.date), "HH:mm", { locale: ptBR })}
+                            {entry.category} · {format(new Date(entry.date), period === "month" ? "dd/MM HH:mm" : "HH:mm", { locale: ptBR })}
                           </p>
                         </div>
                       </div>
-                      <span className={`font-semibold text-sm ${entry.type === "INCOME" ? "text-green-600" : "text-red-600"}`}>
+                      <span className={`font-semibold text-sm shrink-0 ${entry.type === "INCOME" ? "text-green-600" : "text-red-600"}`}>
                         {entry.type === "EXPENSE" ? "-" : "+"}{formatCurrency(Number(entry.amount))}
                       </span>
                     </div>
@@ -367,22 +509,19 @@ export default function FinanceiroPage() {
 
         {/* ─── PAGAR DIÁRIA ─── */}
         <TabsContent value="pagar-diaria" className="mt-4 space-y-4">
-          {/* Header: date + pay button */}
           <div className="flex items-center gap-3 flex-wrap">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Data de referência</p>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
+              <Input type="date" value={dayDate} onChange={(e) => setDayDate(e.target.value)} className="w-44" />
             </div>
           </div>
 
-          {/* Success message */}
           {paySuccess && (
             <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm font-medium">
               Pagamentos registrados com sucesso!
             </div>
           )}
 
-          {/* Washer list */}
           {washersLoading ? (
             <p className="text-center text-muted-foreground py-8">Carregando lavadores...</p>
           ) : !washersLoaded || washers.length === 0 ? (
@@ -401,28 +540,14 @@ export default function FinanceiroPage() {
               {washers.map((washer) => {
                 const isSelected = !!selected[washer.id];
                 const payment = selected[washer.id];
-                const payTotal = payment
-                  ? (payment.days || 0) * (payment.dailyRate || 0) + (payment.bonus || 0)
-                  : 0;
+                const payTotal = payment ? (payment.days || 0) * (payment.dailyRate || 0) + (payment.bonus || 0) : 0;
                 const lastPay = washer.payments[0];
 
                 return (
-                  <Card
-                    key={washer.id}
-                    className={cn(
-                      "transition-all cursor-pointer select-none",
-                      isSelected && "border-primary ring-1 ring-primary"
-                    )}
-                  >
+                  <Card key={washer.id} className={cn("transition-all cursor-pointer", isSelected && "border-primary ring-1 ring-primary")}>
                     <CardContent className="p-4">
-                      {/* Row: checkbox + info + total */}
                       <div className="flex items-center gap-3" onClick={() => toggleWasher(washer)}>
-                        <div
-                          className={cn(
-                            "w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
-                            isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"
-                          )}
-                        >
+                        <div className={cn("w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
                           {isSelected && <Check className="w-3 h-3 text-white" />}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -432,72 +557,38 @@ export default function FinanceiroPage() {
                             {washer.dailyRate
                               ? <span className="font-medium text-foreground">{formatCurrency(Number(washer.dailyRate))}</span>
                               : <span className="text-orange-500">não definida</span>}
-                            {lastPay && (
-                              <span>
-                                {" "}· Último pag:{" "}
-                                {format(new Date(lastPay.date), "dd/MM", { locale: ptBR })}
-                              </span>
-                            )}
+                            {lastPay && ` · Último pag: ${format(new Date(lastPay.date), "dd/MM", { locale: ptBR })}`}
                           </p>
                         </div>
                         {isSelected && (
-                          <p className="font-bold text-red-600 text-sm shrink-0 ml-auto">
-                            {formatCurrency(payTotal)}
-                          </p>
+                          <p className="font-bold text-red-600 text-sm shrink-0 ml-auto">{formatCurrency(payTotal)}</p>
                         )}
                       </div>
 
-                      {/* Expanded inputs when selected */}
                       {isSelected && payment && (
-                        <div
-                          className="mt-3 pt-3 border-t"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Dias</Label>
-                              <Input
-                                type="number"
-                                step="0.5"
-                                min="0.5"
-                                max="31"
-                                value={payment.days || ""}
-                                onChange={(e) => updatePayment(washer.id, "days", e.target.value)}
-                                className="mt-1 h-9 text-sm"
-                                inputMode="decimal"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Valor/dia (R$)</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={payment.dailyRate || ""}
-                                onChange={(e) => updatePayment(washer.id, "dailyRate", e.target.value)}
-                                className="mt-1 h-9 text-sm"
-                                inputMode="decimal"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Bônus (R$)</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={payment.bonus || ""}
-                                onChange={(e) => updatePayment(washer.id, "bonus", e.target.value)}
-                                className="mt-1 h-9 text-sm"
-                                inputMode="decimal"
-                                placeholder="0,00"
-                              />
-                            </div>
+                        <div className="mt-3 pt-3 border-t grid grid-cols-3 gap-2" onClick={(e) => e.stopPropagation()}>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Dias</Label>
+                            <Input type="number" step="0.5" min="0.5" max="31" value={payment.days || ""}
+                              onChange={(e) => updatePayment(washer.id, "days", e.target.value)}
+                              className="mt-1 h-9 text-sm" inputMode="decimal" />
                           </div>
-                          <p className="text-xs text-muted-foreground mt-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Valor/dia (R$)</Label>
+                            <Input type="number" step="0.01" min="0" value={payment.dailyRate || ""}
+                              onChange={(e) => updatePayment(washer.id, "dailyRate", e.target.value)}
+                              className="mt-1 h-9 text-sm" inputMode="decimal" />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Bônus (R$)</Label>
+                            <Input type="number" step="0.01" min="0" value={payment.bonus || ""}
+                              onChange={(e) => updatePayment(washer.id, "bonus", e.target.value)}
+                              className="mt-1 h-9 text-sm" inputMode="decimal" placeholder="0,00" />
+                          </div>
+                          <p className="col-span-3 text-xs text-muted-foreground">
                             {payment.days}d × {formatCurrency(payment.dailyRate)}
                             {payment.bonus > 0 && ` + bônus ${formatCurrency(payment.bonus)}`}
-                            {" = "}
-                            <span className="font-semibold text-foreground">{formatCurrency(payTotal)}</span>
+                            {" = "}<span className="font-semibold text-foreground">{formatCurrency(payTotal)}</span>
                           </p>
                         </div>
                       )}
@@ -508,50 +599,35 @@ export default function FinanceiroPage() {
             </div>
           )}
 
-          {/* Sticky pay bar */}
           {selectedCount > 0 && (
-            <div className="sticky bottom-0 bg-background border-t py-3 px-0 flex items-center gap-3">
+            <div className="sticky bottom-0 bg-background border-t py-3 flex items-center gap-3">
               <div>
                 <p className="text-xs text-muted-foreground">{selectedCount} lavador{selectedCount > 1 ? "es" : ""} selecionado{selectedCount > 1 ? "s" : ""}</p>
                 <p className="text-xl font-bold text-red-600">{formatCurrency(totalToPay)}</p>
               </div>
-              <Button
-                onClick={paySelected}
-                disabled={paying || totalToPay <= 0}
-                className="ml-auto gap-2"
-                size="lg"
-              >
+              <Button onClick={paySelected} disabled={paying || totalToPay <= 0} className="ml-auto gap-2" size="lg">
                 {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Banknote className="w-4 h-4" />}
                 Confirmar Pagamento
               </Button>
             </div>
           )}
 
-          {/* Payments today */}
           {dailyPaymentsToday.length > 0 && (
             <div className="mt-2">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2">
-                Pagamentos do dia
-              </p>
-              <Card>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {dailyPaymentsToday.map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium">{entry.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(entry.date), "HH:mm", { locale: ptBR })}
-                          </p>
-                        </div>
-                        <span className="font-semibold text-sm text-red-600">
-                          -{formatCurrency(Number(entry.amount))}
-                        </span>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2">Pagamentos do dia</p>
+              <Card><CardContent className="p-0">
+                <div className="divide-y">
+                  {dailyPaymentsToday.map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium">{entry.description}</p>
+                        <p className="text-xs text-muted-foreground">{format(new Date(entry.date), "HH:mm", { locale: ptBR })}</p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      <span className="font-semibold text-sm text-red-600">-{formatCurrency(Number(entry.amount))}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent></Card>
             </div>
           )}
         </TabsContent>
@@ -559,9 +635,7 @@ export default function FinanceiroPage() {
         {/* ─── LAVADORES ─── */}
         <TabsContent value="lavadores" className="mt-4 space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Cadastre os lavadores e defina a diária padrão de cada um.
-            </p>
+            <p className="text-sm text-muted-foreground">Cadastre os lavadores e defina a diária padrão.</p>
             <Button onClick={openCreateWasher} className="gap-1">
               <Plus className="w-4 h-4" /> Novo Lavador
             </Button>
@@ -570,12 +644,10 @@ export default function FinanceiroPage() {
           {washersLoading ? (
             <p className="text-center text-muted-foreground py-8">Carregando...</p>
           ) : !washersLoaded || washers.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <UserCheck className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
-                <p className="text-muted-foreground">Nenhum lavador cadastrado</p>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="text-center py-12">
+              <UserCheck className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
+              <p className="text-muted-foreground">Nenhum lavador cadastrado</p>
+            </CardContent></Card>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {washers.map((washer) => {
@@ -586,21 +658,12 @@ export default function FinanceiroPage() {
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="font-bold truncate">{washer.name}</p>
-                          {washer.phone && (
-                            <p className="text-sm text-muted-foreground">{formatPhone(washer.phone)}</p>
-                          )}
-                          {washer.cpf && (
-                            <p className="text-xs text-muted-foreground">CPF: {washer.cpf}</p>
-                          )}
+                          {washer.phone && <p className="text-sm text-muted-foreground">{formatPhone(washer.phone)}</p>}
+                          {washer.cpf && <p className="text-xs text-muted-foreground">CPF: {washer.cpf}</p>}
                         </div>
                         <div className="flex items-center gap-1 ml-2 shrink-0">
                           <Badge variant="success">Ativo</Badge>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={() => openEditWasher(washer)}
-                          >
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEditWasher(washer)}>
                             <Pencil className="w-3 h-3" />
                           </Button>
                         </div>
@@ -619,9 +682,7 @@ export default function FinanceiroPage() {
                         {lastPay && (
                           <div className="text-right">
                             <p className="text-xs text-muted-foreground">Último pag.</p>
-                            <p className="font-semibold text-xs">
-                              {format(new Date(lastPay.date), "dd/MM/yy", { locale: ptBR })}
-                            </p>
+                            <p className="font-semibold text-xs">{format(new Date(lastPay.date), "dd/MM/yy", { locale: ptBR })}</p>
                           </div>
                         )}
                       </div>
@@ -635,10 +696,7 @@ export default function FinanceiroPage() {
 
         {/* ─── CATEGORIAS ─── */}
         <TabsContent value="categorias" className="mt-4 space-y-4">
-          <Button
-            onClick={() => { setCatForm({ name: "", type: "INCOME" }); setEditingCat(null); setCatDialog(true); }}
-            className="gap-1"
-          >
+          <Button onClick={() => { setCatForm({ name: "", type: "INCOME", expenseType: "" }); setEditingCat(null); setCatDialog(true); }} className="gap-1">
             <Plus className="w-4 h-4" /> Nova Categoria
           </Button>
 
@@ -654,23 +712,27 @@ export default function FinanceiroPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {cats.length === 0 && (
-                    <p className="text-xs text-muted-foreground">Nenhuma categoria ainda.</p>
-                  )}
+                  {cats.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma categoria ainda.</p>}
                   {cats.map((c) => (
                     <div key={c.id} className="flex items-center justify-between">
-                      <span className="text-sm">{c.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{c.name}</span>
+                        {c.expenseType && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${EXPENSE_TYPE_COLORS[c.expenseType]}`}>
+                            {EXPENSE_TYPE_LABELS[c.expenseType]}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex gap-1">
-                        <Button
-                          size="sm" variant="ghost" className="h-7 w-7 p-0"
-                          onClick={() => { setEditingCat(c); setCatForm({ name: c.name, type: c.type }); setCatDialog(true); }}
-                        >
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                          onClick={() => {
+                            setEditingCat(c);
+                            setCatForm({ name: c.name, type: c.type, expenseType: c.expenseType ?? "" });
+                            setCatDialog(true);
+                          }}>
                           <Pencil className="w-3 h-3" />
                         </Button>
-                        <Button
-                          size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive"
-                          onClick={() => deleteCategory(c.id)}
-                        >
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => deleteCategory(c.id)}>
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
@@ -690,7 +752,8 @@ export default function FinanceiroPage() {
           <form onSubmit={addEntry} className="space-y-4">
             <div>
               <Label>Tipo</Label>
-              <Select value={entryForm.type} onValueChange={(v) => setEntryForm({ ...entryForm, type: v, categoryId: "" })}>
+              <Select value={entryForm.type} onValueChange={(v: "INCOME" | "EXPENSE") =>
+                setEntryForm({ ...entryForm, type: v, categoryId: "", expenseType: "" })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="INCOME">Receita</SelectItem>
@@ -698,33 +761,45 @@ export default function FinanceiroPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {entryForm.type === "EXPENSE" && (
+              <div>
+                <Label>Tipo de despesa</Label>
+                <Select value={entryForm.expenseType} onValueChange={(v) =>
+                  setEntryForm({ ...entryForm, expenseType: v as ExpenseType })}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MENSAL">🗓 Mensal</SelectItem>
+                    <SelectItem value="DIARIA">☀️ Diária</SelectItem>
+                    <SelectItem value="INSUMOS">🧴 Insumos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
               <Label>Categoria</Label>
-              <Select value={entryForm.categoryId} onValueChange={(v) => setEntryForm({ ...entryForm, categoryId: v })}>
+              <Select value={entryForm.categoryId} onValueChange={handleCategoryChange}>
                 <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
                 <SelectContent>
                   {categories.filter((c) => c.type === entryForm.type).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}{c.expenseType ? ` (${EXPENSE_TYPE_LABELS[c.expenseType]})` : ""}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
             <div>
               <Label>Descrição *</Label>
-              <Input
-                value={entryForm.description}
-                onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })}
-                required
-              />
+              <Input value={entryForm.description}
+                onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} required />
             </div>
             <div>
               <Label>Valor (R$) *</Label>
-              <Input
-                type="number" step="0.01" min="0.01"
-                value={entryForm.amount}
-                onChange={(e) => setEntryForm({ ...entryForm, amount: e.target.value })}
-                required
-              />
+              <Input type="number" step="0.01" min="0.01" value={entryForm.amount}
+                onChange={(e) => setEntryForm({ ...entryForm, amount: e.target.value })} required />
             </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" className="flex-1" onClick={() => setEntryDialog(false)}>Cancelar</Button>
@@ -744,7 +819,8 @@ export default function FinanceiroPage() {
             {!editingCat && (
               <div>
                 <Label>Tipo</Label>
-                <Select value={catForm.type} onValueChange={(v: "INCOME" | "EXPENSE") => setCatForm({ ...catForm, type: v })}>
+                <Select value={catForm.type} onValueChange={(v: "INCOME" | "EXPENSE") =>
+                  setCatForm({ ...catForm, type: v, expenseType: "" })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="INCOME">Receita</SelectItem>
@@ -753,6 +829,22 @@ export default function FinanceiroPage() {
                 </Select>
               </div>
             )}
+
+            {(editingCat?.type === "EXPENSE" || catForm.type === "EXPENSE") && (
+              <div>
+                <Label>Tipo de despesa</Label>
+                <Select value={catForm.expenseType} onValueChange={(v) =>
+                  setCatForm({ ...catForm, expenseType: v as ExpenseType })}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MENSAL">🗓 Mensal</SelectItem>
+                    <SelectItem value="DIARIA">☀️ Diária</SelectItem>
+                    <SelectItem value="INSUMOS">🧴 Insumos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
               <Label>Nome *</Label>
               <Input value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} required />
@@ -774,46 +866,28 @@ export default function FinanceiroPage() {
           <form onSubmit={saveWasher} className="space-y-4">
             <div>
               <Label>Nome *</Label>
-              <Input
-                value={washerForm.name}
-                onChange={(e) => setWasherForm({ ...washerForm, name: e.target.value })}
-                placeholder="Nome completo"
-                required
-              />
+              <Input value={washerForm.name} onChange={(e) => setWasherForm({ ...washerForm, name: e.target.value })}
+                placeholder="Nome completo" required />
             </div>
             <div>
               <Label>Diária Padrão (R$)</Label>
-              <Input
-                type="number" step="0.01" min="0"
-                value={washerForm.dailyRate}
+              <Input type="number" step="0.01" min="0" value={washerForm.dailyRate}
                 onChange={(e) => setWasherForm({ ...washerForm, dailyRate: e.target.value })}
-                placeholder="Ex: 100,00"
-                inputMode="decimal"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Valor pré-preenchido ao pagar diária
-              </p>
+                placeholder="Ex: 100,00" inputMode="decimal" />
+              <p className="text-xs text-muted-foreground mt-1">Valor pré-preenchido ao pagar diária</p>
             </div>
             <div>
               <Label>Telefone</Label>
-              <Input
-                value={washerForm.phone}
-                onChange={(e) => setWasherForm({ ...washerForm, phone: e.target.value })}
-                placeholder="(11) 99999-0000"
-              />
+              <Input value={washerForm.phone} onChange={(e) => setWasherForm({ ...washerForm, phone: e.target.value })}
+                placeholder="(11) 99999-0000" />
             </div>
             <div>
               <Label>CPF</Label>
-              <Input
-                value={washerForm.cpf}
-                onChange={(e) => setWasherForm({ ...washerForm, cpf: e.target.value })}
-                placeholder="000.000.000-00"
-              />
+              <Input value={washerForm.cpf} onChange={(e) => setWasherForm({ ...washerForm, cpf: e.target.value })}
+                placeholder="000.000.000-00" />
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setWasherDialog(false)} disabled={washerSaving}>
-                Cancelar
-              </Button>
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setWasherDialog(false)} disabled={washerSaving}>Cancelar</Button>
               <Button type="submit" className="flex-1" disabled={washerSaving}>
                 {washerSaving ? "Salvando..." : editingWasherId ? "Salvar" : "Cadastrar"}
               </Button>

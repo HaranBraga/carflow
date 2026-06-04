@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       data: {
         type: "EXPENSE",
         category: "Diária Lavador",
+        expenseType: "DIARIA",
         description,
         amount,
       },
