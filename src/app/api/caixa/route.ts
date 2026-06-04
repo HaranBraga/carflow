@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantPrisma } from "@/lib/prisma-tenant";
 import { z } from "zod";
-import { startOfDay, endOfDay } from "date-fns";
 
 const cashFlowSchema = z.object({
   type: z.enum(["INCOME", "EXPENSE"]),
@@ -21,10 +20,13 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const dateStr = searchParams.get("date") || new Date().toISOString().split("T")[0];
-  const date = new Date(dateStr);
+
+  // Use explicit UTC boundaries to avoid timezone issues on the server
+  const startDate = new Date(dateStr + "T00:00:00.000Z");
+  const endDate = new Date(dateStr + "T23:59:59.999Z");
 
   const where = {
-    date: { gte: startOfDay(date), lte: endOfDay(date) },
+    date: { gte: startDate, lte: endDate },
   };
 
   const [entries, income, expense] = await Promise.all([

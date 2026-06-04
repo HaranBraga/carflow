@@ -6,12 +6,7 @@ const washerSchema = z.object({
   name: z.string().min(2),
   phone: z.string().optional(),
   cpf: z.string().optional(),
-});
-
-const paymentSchema = z.object({
-  washerId: z.string(),
-  amount: z.number().positive(),
-  notes: z.string().optional(),
+  dailyRate: z.number().positive().optional(),
 });
 
 export async function GET() {
@@ -28,7 +23,8 @@ export async function GET() {
       _count: { select: { orders: true, payments: true } },
       payments: {
         orderBy: { date: "desc" },
-        take: 1,
+        take: 3,
+        select: { id: true, amount: true, days: true, bonus: true, date: true, notes: true },
       },
     },
     orderBy: { name: "asc" },
@@ -45,28 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-
-  if (body.action === "pay") {
-    const { washerId, amount, notes } = paymentSchema.parse(body);
-
-    const payment = await prisma.washerPayment.create({
-      data: { washerId, amount, notes },
-    });
-
-    await prisma.cashFlow.create({
-      data: {
-        type: "EXPENSE",
-        category: "Lavador",
-        description: notes || `Pagamento lavador`,
-        amount,
-      },
-    });
-
-    return NextResponse.json(payment, { status: 201 });
-  }
-
-  const data = washerSchema.parse(body);
+  const data = washerSchema.parse(await req.json());
   const washer = await prisma.washer.create({ data });
 
   return NextResponse.json(washer, { status: 201 });

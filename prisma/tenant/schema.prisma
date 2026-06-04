@@ -193,6 +193,7 @@ model Washer {
   phone     String?
   cpf       String?
   active    Boolean  @default(true)
+  dailyRate Decimal? @db.Decimal(10, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -206,6 +207,8 @@ model WasherPayment {
   id         String   @id @default(cuid())
   washerId   String
   amount     Decimal  @db.Decimal(10, 2)
+  days       Decimal  @db.Decimal(10, 2) @default(1)
+  bonus      Decimal  @db.Decimal(10, 2) @default(0)
   date       DateTime @default(now())
   notes      String?
   cashFlowId String?

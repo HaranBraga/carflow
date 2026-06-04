@@ -7,6 +7,7 @@ const schema = z.object({
   phone: z.string().optional(),
   cpf: z.string().optional(),
   active: z.boolean().optional(),
+  dailyRate: z.number().positive().nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

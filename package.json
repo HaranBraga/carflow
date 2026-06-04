@@ -11,7 +11,9 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "db:seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
+    "db:tenant:generate": "prisma generate --schema prisma/tenant/schema.prisma",
+    "db:tenant:push": "prisma db push --schema prisma/tenant/schema.prisma --accept-data-loss --skip-generate"
   },
   "keywords": [],
   "author": "",
