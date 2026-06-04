@@ -94,10 +94,20 @@ export default function FinanceiroPage() {
   const [paying, setPaying] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
 
-  // Dialog: lançamento
+  // Dialog: novo lançamento
   const [entryDialog, setEntryDialog] = useState(false);
   const [entryForm, setEntryForm] = useState({
     type: "INCOME" as "INCOME" | "EXPENSE",
+    categoryId: "",
+    description: "",
+    amount: "",
+    expenseType: "" as ExpenseType | "",
+  });
+
+  // Dialog: editar lançamento
+  const [editDialog, setEditDialog] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  const [editForm, setEditForm] = useState({
     categoryId: "",
     description: "",
     amount: "",
@@ -227,6 +237,51 @@ export default function FinanceiroPage() {
     });
     setEntryDialog(false);
     setEntryForm({ type: "INCOME", categoryId: "", description: "", amount: "", expenseType: "" });
+    loadCash();
+  }
+
+  // ── Editar / Excluir lançamento ──
+
+  function openEditEntry(entry: Entry) {
+    const matchedCat = categories.find((c) => c.name === entry.category);
+    setEditingEntry(entry);
+    setEditForm({
+      categoryId: matchedCat?.id ?? "",
+      description: entry.description ?? "",
+      amount: String(Number(entry.amount)),
+      expenseType: (entry.expenseType as ExpenseType) ?? "",
+    });
+    setEditDialog(true);
+  }
+
+  async function saveEditEntry(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingEntry) return;
+    const cat = categories.find((c) => c.id === editForm.categoryId);
+    await fetch(`/api/caixa/${editingEntry.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category: cat?.name || editingEntry.category,
+        categoryId: editForm.categoryId || null,
+        description: editForm.description,
+        amount: parseFloat(editForm.amount),
+        expenseType: editForm.expenseType || null,
+      }),
+    });
+    setEditDialog(false);
+    setEditingEntry(null);
+    loadCash();
+  }
+
+  async function deleteEntry(entry: Entry) {
+    if (!confirm(`Excluir "${entry.description || entry.category}" de ${formatCurrency(Number(entry.amount))}?`)) return;
+    const res = await fetch(`/api/caixa/${entry.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || "Não foi possível excluir este lançamento.");
+      return;
+    }
     loadCash();
   }
 
@@ -496,9 +551,29 @@ export default function FinanceiroPage() {
                           </p>
                         </div>
                       </div>
-                      <span className={`font-semibold text-sm shrink-0 ${entry.type === "INCOME" ? "text-green-600" : "text-red-600"}`}>
-                        {entry.type === "EXPENSE" ? "-" : "+"}{formatCurrency(Number(entry.amount))}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`font-semibold text-sm ${entry.type === "INCOME" ? "text-green-600" : "text-red-600"}`}>
+                          {entry.type === "EXPENSE" ? "-" : "+"}{formatCurrency(Number(entry.amount))}
+                        </span>
+                        {!entry.orderId && (
+                          <div className="flex gap-0.5">
+                            <button
+                              onClick={() => openEditEntry(entry)}
+                              className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                              title="Editar"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => deleteEntry(entry)}
+                              className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -854,6 +929,67 @@ export default function FinanceiroPage() {
               <Button type="submit" className="flex-1">Salvar</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Dialog: Editar Lançamento ─── */}
+      <Dialog open={editDialog} onOpenChange={(o) => { if (!o) { setEditDialog(false); setEditingEntry(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar Lançamento</DialogTitle>
+          </DialogHeader>
+          {editingEntry && (
+            <form onSubmit={saveEditEntry} className="space-y-4">
+              {editingEntry.type === "EXPENSE" && (
+                <div>
+                  <Label>Tipo de despesa</Label>
+                  <Select value={editForm.expenseType} onValueChange={(v) =>
+                    setEditForm({ ...editForm, expenseType: v as ExpenseType })}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MENSAL">Mensal</SelectItem>
+                      <SelectItem value="DIARIA">Diária</SelectItem>
+                      <SelectItem value="INSUMOS">Insumos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div>
+                <Label>Categoria</Label>
+                <Select value={editForm.categoryId} onValueChange={(v) => {
+                  const cat = categories.find((c) => c.id === v);
+                  setEditForm({
+                    ...editForm,
+                    categoryId: v,
+                    expenseType: (cat?.expenseType as ExpenseType) || editForm.expenseType,
+                  });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Manter atual..." /></SelectTrigger>
+                  <SelectContent>
+                    {categories.filter((c) => c.type === editingEntry.type).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}{c.expenseType ? ` (${EXPENSE_TYPE_LABELS[c.expenseType]})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Descrição</Label>
+                <Input value={editForm.description} placeholder="Opcional"
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+              </div>
+              <div>
+                <Label>Valor (R$) *</Label>
+                <Input type="number" step="0.01" min="0.01" value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} required />
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setEditDialog(false)}>Cancelar</Button>
+                <Button type="submit" className="flex-1">Salvar</Button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 
