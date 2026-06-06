@@ -9,7 +9,13 @@ export async function GET() {
 
   const tenant = await masterPrisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { whatsappTemplate: true, evolutionApiUrl: true, evolutionInstance: true },
+    select: {
+      whatsappTemplate: true,
+      evolutionApiUrl: true,
+      evolutionInstance: true,
+      instagramUrl: true,
+      feedbackConfig: true,
+    },
   });
 
   return NextResponse.json(tenant);
@@ -20,13 +26,24 @@ export async function PATCH(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const tenantId = (session.user as any).tenantId;
 
-  const { whatsappTemplate } = await req.json();
+  const body = await req.json();
+  const { whatsappTemplate, instagramUrl, feedbackConfig } = body;
+
+  const data: any = {};
+  if ("whatsappTemplate" in body) data.whatsappTemplate = whatsappTemplate || null;
+  if ("instagramUrl" in body) data.instagramUrl = instagramUrl || null;
+  if ("feedbackConfig" in body) data.feedbackConfig = feedbackConfig
+    ? JSON.stringify(feedbackConfig)
+    : null;
 
   const tenant = await masterPrisma.tenant.update({
     where: { id: tenantId },
-    data: { whatsappTemplate: whatsappTemplate || null },
-    select: { whatsappTemplate: true },
+    data,
+    select: { whatsappTemplate: true, instagramUrl: true, feedbackConfig: true },
   });
 
-  return NextResponse.json(tenant);
+  return NextResponse.json({
+    ...tenant,
+    feedbackConfig: tenant.feedbackConfig ? JSON.parse(tenant.feedbackConfig) : null,
+  });
 }

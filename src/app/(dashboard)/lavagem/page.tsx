@@ -38,6 +38,7 @@ export default function LavagemPage() {
   }, [fetchOrders]);
 
   async function updateStatus(orderId: string, status: string) {
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
     await fetch(`/api/ordens/${orderId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

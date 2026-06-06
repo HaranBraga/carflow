@@ -20,7 +20,6 @@ type ServiceData = {
   description: string | null;
   basePrice: number;
   pricingType: string;
-  isOpportunityOnly: boolean;
   active: boolean;
   prices: { id: string; category: string; price: number }[];
 };
@@ -31,7 +30,6 @@ function makeEmptyForm(types: VehicleType[]) {
     description: "",
     basePrice: "",
     pricingType: "FIXED" as "FIXED" | "PER_M2",
-    isOpportunityOnly: false,
     prices: types.map((t) => ({ category: t.key, price: "", enabled: false })) as CategoryPrice[],
     samePriceAll: true,
   };
@@ -79,7 +77,6 @@ export default function ServicosPage() {
       description: svc.description ?? "",
       basePrice: String(svc.basePrice),
       pricingType: (svc.pricingType as "FIXED" | "PER_M2") ?? "FIXED",
-      isOpportunityOnly: svc.isOpportunityOnly ?? false,
       prices: vehicleTypes.map((t) => ({
         category: t.key,
         price: priceByCat[t.key] !== undefined ? String(priceByCat[t.key]) : "",
@@ -128,7 +125,6 @@ export default function ServicosPage() {
       description: form.description || undefined,
       basePrice,
       pricingType: form.pricingType,
-      isOpportunityOnly: form.isOpportunityOnly,
       prices,
     };
 
@@ -195,9 +191,6 @@ export default function ServicosPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold">{s.name}</p>
-                          {s.isOpportunityOnly && (
-                            <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 text-xs">Só oportunidade</Badge>
-                          )}
                           {s.prices.length === 0 ? (
                             <Badge variant="secondary">Preço único: {formatCurrency(Number(s.basePrice))}</Badge>
                           ) : (
@@ -262,15 +255,6 @@ export default function ServicosPage() {
                 <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição do serviço" />
               </div>
             </div>
-
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isOpportunityOnly}
-                onChange={(e) => setForm({ ...form, isOpportunityOnly: e.target.checked })}
-              />
-              <span className="text-sm font-medium">Apenas oportunidade</span>
-            </label>
 
             <div className="border-t pt-4 space-y-3">
               <Label className="text-base">Preço por tipo de veículo</Label>

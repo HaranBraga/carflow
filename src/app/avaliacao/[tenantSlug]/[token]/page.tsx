@@ -7,6 +7,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
+type PublicConfig = {
+  instagramUrl: string;
+  title?: string;
+  subtitle?: string;
+  showComment?: boolean;
+  showBirthdate?: boolean;
+  thankyouTitle?: string;
+  thankyouMessage?: string;
+};
+
+const DEFAULTS: Required<PublicConfig> = {
+  instagramUrl: "",
+  title: "Como foi sua experiência?",
+  subtitle: "Leva só 30 segundos e nos ajuda muito! 😊",
+  showComment: true,
+  showBirthdate: true,
+  thankyouTitle: "Obrigado! 🙏",
+  thankyouMessage: "Sua opinião nos ajuda a melhorar cada vez mais!",
+};
+
 export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug: string; token: string }> }) {
   const { tenantSlug, token } = use(params);
   const [step, setStep] = useState<"rating" | "dados" | "done">("rating");
@@ -16,11 +36,14 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
   const [birthdate, setBirthdate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [instagramUrl, setInstagramUrl] = useState("");
+  const [config, setConfig] = useState<Required<PublicConfig>>(DEFAULTS);
 
   useEffect(() => {
-    setInstagramUrl(process.env.NEXT_PUBLIC_INSTAGRAM_URL || "https://instagram.com");
-  }, []);
+    fetch(`/api/public/${tenantSlug}`)
+      .then((r) => r.json())
+      .then((data) => setConfig({ ...DEFAULTS, ...data }))
+      .catch(() => {});
+  }, [tenantSlug]);
 
   const ratingLabels = ["", "Muito ruim 😞", "Ruim 😕", "Regular 😐", "Bom 😊", "Excelente! 🤩"];
 
@@ -44,15 +67,11 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
 
     setLoading(false);
     if (res.ok) {
-      setStep("dados");
+      setStep(config.showBirthdate ? "dados" : "done");
     } else {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "Erro ao enviar avaliação.");
     }
-  }
-
-  async function saveData() {
-    setStep("done");
   }
 
   if (step === "done") {
@@ -64,16 +83,14 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Obrigado! 🙏</h2>
-              <p className="text-muted-foreground mt-2 text-sm">
-                Sua opinião nos ajuda a melhorar cada vez mais!
-              </p>
+              <h2 className="text-xl font-bold">{config.thankyouTitle}</h2>
+              <p className="text-muted-foreground mt-2 text-sm">{config.thankyouMessage}</p>
             </div>
 
-            {instagramUrl && instagramUrl !== "https://instagram.com" && (
+            {config.instagramUrl && (
               <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 rounded-2xl p-4 space-y-3">
                 <p className="text-white font-medium text-sm">Nos siga no Instagram e fique por dentro de promoções!</p>
-                <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
+                <a href={config.instagramUrl} target="_blank" rel="noopener noreferrer"
                   onClick={async () => {
                     await fetch("/api/feedback", {
                       method: "POST",
@@ -123,7 +140,7 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
             </div>
 
             <div className="flex gap-2">
-              <Button variant="ghost" className="flex-1 text-muted-foreground" onClick={saveData}>
+              <Button variant="ghost" className="flex-1 text-muted-foreground" onClick={() => setStep("done")}>
                 Pular
               </Button>
               <Button className="flex-1" onClick={async () => {
@@ -134,7 +151,7 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
                     body: JSON.stringify({ token, tenantSlug, rating, birthdate }),
                   });
                 }
-                saveData();
+                setStep("done");
               }}>
                 Salvar e continuar
               </Button>
@@ -153,10 +170,8 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
             <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-3">
               <Star className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-xl font-bold">Como foi sua experiência?</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Leva só 30 segundos e nos ajuda muito! 😊
-            </p>
+            <h1 className="text-xl font-bold">{config.title}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{config.subtitle}</p>
           </div>
 
           {/* Rating */}
@@ -188,16 +203,18 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
           </div>
 
           {/* Comentário */}
-          <div>
-            <Label>Comentário <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-            <Textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="O que você achou? O que podemos melhorar?"
-              rows={3}
-              className="mt-1"
-            />
-          </div>
+          {config.showComment && (
+            <div>
+              <Label>Comentário <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+              <Textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="O que você achou? O que podemos melhorar?"
+                rows={3}
+                className="mt-1"
+              />
+            </div>
+          )}
 
           {error && <p className="text-sm text-destructive text-center">{error}</p>}
 

@@ -9,7 +9,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { formatCurrency, formatPhone, GENDER_LABELS, VEHICLE_CATEGORY_LABELS, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "@/lib/utils";
+
+function lastVisitDate(customer: any): Date | null {
+  const dates = customer.vehicles?.flatMap((v: any) => v.orders?.map((o: any) => new Date(o.arrivedAt)) ?? []) ?? [];
+  if (!dates.length) return null;
+  return new Date(Math.max(...dates.map((d: Date) => d.getTime())));
+}
+
+function haQuantosDias(date: Date | null): string | null {
+  if (!date) return null;
+  return formatDistanceToNow(date, { locale: ptBR, addSuffix: true });
+}
 
 type Customer = {
   id: string;
@@ -110,6 +123,16 @@ export default function ClientesPage() {
                         </div>
                         <p className="text-sm text-muted-foreground">{formatPhone(c.phone)}</p>
                         <p className="text-xs text-muted-foreground">{GENDER_LABELS[c.gender]}</p>
+                        {(() => {
+                          const ultimo = haQuantosDias(lastVisitDate(c));
+                          return ultimo ? (
+                            <p className="text-xs text-orange-600 flex items-center gap-1 mt-0.5">
+                              <Clock className="w-3 h-3" /> Última visita {ultimo}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground mt-0.5">Sem visitas registradas</p>
+                          );
+                        })()}
                         {c.vehicles?.length > 0 && (
                           <div className="flex gap-2 mt-2 flex-wrap">
                             {c.vehicles.map((v: any) => (
@@ -353,6 +376,18 @@ function CRMOportunidades() {
                         <a href={`tel:${customer.phone}`} className="hover:underline">{formatPhone(customer.phone)}</a>
                         <span className="font-mono text-xs">· {plate}</span>
                       </p>
+                      {(() => {
+                        const lastDate = ops.reduce((max: Date | null, op: any) => {
+                          const d = new Date(op.order.arrivedAt);
+                          return !max || d > max ? d : max;
+                        }, null);
+                        const texto = haQuantosDias(lastDate);
+                        return texto ? (
+                          <p className="text-xs text-orange-600 flex items-center gap-1 mt-0.5">
+                            <Clock className="w-3 h-3" /> Última visita {texto}
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
 

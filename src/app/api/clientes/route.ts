@@ -43,7 +43,16 @@ export async function GET(req: NextRequest) {
     prisma.customer.findMany({
       where,
       include: {
-        vehicles: { orderBy: { createdAt: "desc" } },
+        vehicles: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            orders: {
+              orderBy: { arrivedAt: "desc" },
+              take: 1,
+              select: { arrivedAt: true },
+            },
+          },
+        },
         _count: { select: { feedbacks: true } },
       },
       orderBy: { name: "asc" },
