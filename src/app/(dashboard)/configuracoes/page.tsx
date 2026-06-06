@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Settings, MessageCircle, Save, Instagram, Star } from "lucide-react";
+import { Settings, MessageCircle, Save, Link2, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -148,7 +148,7 @@ export default function ConfiguracoesPage() {
           {/* Instagram */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              <Instagram className="w-4 h-4 text-pink-500" /> Link do Instagram
+              <Link2 className="w-4 h-4 text-pink-500" /> Link do Instagram
             </Label>
             <Input
               value={instagramUrl}
