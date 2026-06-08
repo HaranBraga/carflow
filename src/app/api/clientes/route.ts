@@ -24,20 +24,24 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") || "";
+  const gender = searchParams.get("gender") || "";
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "20");
 
   const normalizedSearch = normalizePhone(search);
-  const where = search
-    ? {
-        OR: [
-          { name: { contains: search, mode: "insensitive" as const } },
-          ...(normalizedSearch.length >= 8
-            ? [{ phone: { contains: normalizedSearch } }]
-            : []),
-        ],
-      }
-    : {};
+  const where = {
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" as const } },
+            ...(normalizedSearch.length >= 8
+              ? [{ phone: { contains: normalizedSearch } }]
+              : []),
+          ],
+        }
+      : {}),
+    ...(gender ? { gender: gender as any } : {}),
+  };
 
   const [customers, total] = await Promise.all([
     prisma.customer.findMany({

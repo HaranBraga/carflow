@@ -445,7 +445,7 @@ export default function FinanceiroPage() {
           </div>
 
           {/* Summary cards */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Card>
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="p-2 bg-green-50 rounded-lg shrink-0">

@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Car, LayoutDashboard, DollarSign, Users, Star,
-  CloudSun, BarChart2, LogOut, Menu, X, Wrench, History, Settings, TrendingUp, MoreHorizontal
+  Car, LayoutDashboard, DollarSign, Users,
+  BarChart2, LogOut, Menu, X, Wrench, History, Settings, TrendingUp, MoreHorizontal
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -18,8 +18,6 @@ const navItems = [
   { href: "/financeiro", label: "Financeiro", icon: TrendingUp },
   { href: "/clientes", label: "CRM / Clientes", icon: Users },
   { href: "/servicos", label: "Serviços", icon: BarChart2 },
-  { href: "/feedback", label: "Feedback", icon: Star },
-  { href: "/previsao", label: "Previsão do Tempo", icon: CloudSun },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 

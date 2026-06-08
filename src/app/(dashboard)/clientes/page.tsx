@@ -40,6 +40,7 @@ type Customer = {
 export default function ClientesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
+  const [genderFilter, setGenderFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("clientes");
   const [editing, setEditing] = useState<Customer | null>(null);
@@ -48,9 +49,11 @@ export default function ClientesPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
 
-  async function fetchCustomers(q = "") {
+  async function fetchCustomers(q = "", gender = "") {
     setLoading(true);
-    const res = await fetch(`/api/clientes?search=${q}&limit=50`);
+    const params = new URLSearchParams({ search: q, limit: "50" });
+    if (gender) params.set("gender", gender);
+    const res = await fetch(`/api/clientes?${params.toString()}`);
     const data = await res.json();
     setCustomers(data.customers || []);
     setLoading(false);
@@ -58,9 +61,9 @@ export default function ClientesPage() {
 
   useEffect(() => { fetchCustomers(); }, []);
   useEffect(() => {
-    const t = setTimeout(() => fetchCustomers(search), 400);
+    const t = setTimeout(() => fetchCustomers(search, genderFilter), 400);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, genderFilter]);
 
   function openEdit(c: Customer) {
     setEditing(c);
@@ -101,13 +104,24 @@ export default function ClientesPage() {
           <TabsTrigger value="clientes">Clientes</TabsTrigger>
           <TabsTrigger value="oportunidades">Oportunidades</TabsTrigger>
           <TabsTrigger value="ranking">Rankings</TabsTrigger>
-          <TabsTrigger value="genero">Por Gênero</TabsTrigger>
         </TabsList>
 
         <TabsContent value="clientes" className="space-y-4 mt-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Buscar cliente..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Buscar cliente..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            </div>
+            <Select value={genderFilter || "all"} onValueChange={(v) => setGenderFilter(v === "all" ? "" : v)}>
+              <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Gênero" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os gêneros</SelectItem>
+                <SelectItem value="MALE">Masculino</SelectItem>
+                <SelectItem value="FEMALE">Feminino</SelectItem>
+                <SelectItem value="OTHER">Outro</SelectItem>
+                <SelectItem value="NOT_INFORMED">Não informado</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           {loading ? (
             <p className="text-center text-muted-foreground py-8">Carregando...</p>
@@ -165,7 +179,6 @@ export default function ClientesPage() {
 
         <TabsContent value="oportunidades" className="mt-4"><CRMOportunidades /></TabsContent>
         <TabsContent value="ranking" className="mt-4"><CRMRanking /></TabsContent>
-        <TabsContent value="genero" className="mt-4"><CRMGender /></TabsContent>
       </Tabs>
 
       {/* Modal de histórico */}
@@ -358,26 +371,6 @@ function RankingEvolutionChart({ evolution }: { evolution: any[] }) {
         </ResponsiveContainer>
       </CardContent>
     </Card>
-  );
-}
-
-function CRMGender() {
-  const [data, setData] = useState<any>(null);
-  useEffect(() => { fetch("/api/crm/genero").then((r) => r.json()).then(setData); }, []);
-  if (!data) return <p className="text-center text-muted-foreground py-8">Carregando...</p>;
-  const total = data.reduce((sum: number, g: any) => sum + g.count, 0);
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {data.map((g: any) => (
-        <Card key={g.gender}>
-          <CardContent className="p-4 text-center">
-            <p className="text-3xl font-bold">{g.count}</p>
-            <p className="text-sm text-muted-foreground">{GENDER_LABELS[g.gender]}</p>
-            <p className="text-xs text-primary font-medium mt-1">{total > 0 ? Math.round((g.count / total) * 100) : 0}%</p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
   );
 }
 
