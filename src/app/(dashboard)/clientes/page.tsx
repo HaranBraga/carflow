@@ -9,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { formatCurrency, formatPhone, GENDER_LABELS, VEHICLE_CATEGORY_LABELS, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "@/lib/utils";
 
 function lastVisitDate(customer: any): Date | null {
@@ -234,15 +235,46 @@ export default function ClientesPage() {
   );
 }
 
+const RANKING_PERIODS = [
+  { value: "month", label: "Este mês" },
+  { value: "3months", label: "Últimos 3 meses" },
+  { value: "6months", label: "Últimos 6 meses" },
+  { value: "all", label: "Todo o período" },
+];
+
 function CRMRanking() {
   const [data, setData] = useState<any>(null);
-  useEffect(() => { fetch("/api/crm/ranking").then((r) => r.json()).then(setData); }, []);
+  const [period, setPeriod] = useState("month");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/crm/ranking?period=${period}`).then((r) => r.json()).then((d) => { setData(d); setLoading(false); });
+  }, [period]);
+
   if (!data) return <p className="text-center text-muted-foreground py-8">Carregando...</p>;
+
+  const periodLabel = RANKING_PERIODS.find((p) => p.value === period)?.label ?? "";
+
   return (
     <div className="space-y-6">
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">Exibindo: <span className="font-medium text-foreground">{periodLabel}</span></p>
+        <Select value={period} onValueChange={setPeriod}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {RANKING_PERIODS.map((p) => (
+              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <RankingEvolutionChart evolution={data.evolution} />
+
+      <div className={`grid md:grid-cols-3 gap-4 ${loading ? "opacity-50" : ""}`}>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Star className="w-4 h-4 text-yellow-500" />Top Clientes do Mês</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Star className="w-4 h-4 text-yellow-500" />Top Clientes — {periodLabel}</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {data.topCustomers?.map((c: any, i: number) => (
               <div key={c.customerId} className="flex items-center justify-between text-sm">
@@ -256,7 +288,7 @@ function CRMRanking() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-blue-500" />Ranking Serviços</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-blue-500" />Ranking Serviços — {periodLabel}</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {data.topServices?.map((s: any) => (
               <div key={s.serviceName} className="flex items-center justify-between text-sm">
@@ -270,7 +302,7 @@ function CRMRanking() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Car className="w-4 h-4 text-green-500" />Por Categoria</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Car className="w-4 h-4 text-green-500" />Por Categoria — {periodLabel}</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {data.byCategory?.map((c: any) => (
               <div key={c.category} className="flex items-center justify-between text-sm">
@@ -290,6 +322,42 @@ function CRMRanking() {
         </Card>
       )}
     </div>
+  );
+}
+
+function monthLabel(ym: string): string {
+  const [year, month] = ym.split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return format(date, "MMM/yy", { locale: ptBR });
+}
+
+function RankingEvolutionChart({ evolution }: { evolution: any[] }) {
+  if (!evolution || evolution.length === 0) return null;
+
+  const chartData = evolution.map((e) => ({ ...e, label: monthLabel(e.month) }));
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-primary" /> Evolução mensal (últimos 12 meses)
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v).replace(/ /g, " ")} width={80} />
+            <Tooltip
+              formatter={((value: any) => [formatCurrency(Number(value)), "Faturamento"]) as any}
+              labelFormatter={(label) => `Mês: ${label}`}
+            />
+            <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
   );
 }
 
