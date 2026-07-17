@@ -30,11 +30,15 @@ services:
       NEXTAUTH_SECRET: "change-me-in-production-use-strong-secret"
       NEXTAUTH_URL: "http://localhost:3000"
       NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "change-me-in-production"
+      ADMIN_NAME: "Administrador"
+      ADMIN_EMAIL: "admin@carflow.com"
     depends_on:
       postgres:
         condition: service_healthy
     command: >
-      sh -c "npx prisma db push --accept-data-loss && node server.js"
+      sh -c "npx prisma db push --accept-data-loss && node prisma/seed.js && node server.js"
 
 volumes:
   postgres_data:

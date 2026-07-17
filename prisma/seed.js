@@ -1,5 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
@@ -10,7 +10,7 @@ async function main() {
   const email = process.env.ADMIN_EMAIL || `${username}@carflow.local`;
 
   if (!process.env.ADMIN_PASSWORD) {
-    console.warn("Aviso: ADMIN_PASSWORD não definida no .env — usando senha padrão 'admin123'. Defina ADMIN_PASSWORD em produção.");
+    console.warn("Aviso: ADMIN_PASSWORD não definida — usando senha padrão 'admin123'. Defina ADMIN_PASSWORD em produção.");
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
