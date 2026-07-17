@@ -1,5 +1,5 @@
 "use client";
-import { use, useState, useEffect } from "react";
+import { use, useState } from "react";
 import { Star, Send, CheckCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,18 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
-type PublicConfig = {
-  instagramUrl: string;
-  title?: string;
-  subtitle?: string;
-  showComment?: boolean;
-  showBirthdate?: boolean;
-  thankyouTitle?: string;
-  thankyouMessage?: string;
-};
+const INSTAGRAM_URL = process.env.NEXT_PUBLIC_INSTAGRAM_URL || "";
 
-const DEFAULTS: Required<PublicConfig> = {
-  instagramUrl: "",
+const CONFIG = {
   title: "Como foi sua experiência?",
   subtitle: "Leva só 30 segundos e nos ajuda muito! 😊",
   showComment: true,
@@ -27,8 +18,8 @@ const DEFAULTS: Required<PublicConfig> = {
   thankyouMessage: "Sua opinião nos ajuda a melhorar cada vez mais!",
 };
 
-export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug: string; token: string }> }) {
-  const { tenantSlug, token } = use(params);
+export default function AvaliacaoPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params);
   const [step, setStep] = useState<"rating" | "dados" | "done">("rating");
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
@@ -36,14 +27,6 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
   const [birthdate, setBirthdate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [config, setConfig] = useState<Required<PublicConfig>>(DEFAULTS);
-
-  useEffect(() => {
-    fetch(`/api/public/${tenantSlug}`)
-      .then((r) => r.json())
-      .then((data) => setConfig({ ...DEFAULTS, ...data }))
-      .catch(() => {});
-  }, [tenantSlug]);
 
   const ratingLabels = ["", "Muito ruim 😞", "Ruim 😕", "Regular 😐", "Bom 😊", "Excelente! 🤩"];
 
@@ -57,7 +40,6 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         token,
-        tenantSlug,
         rating,
         comment,
         birthdate: birthdate || undefined,
@@ -67,7 +49,7 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
 
     setLoading(false);
     if (res.ok) {
-      setStep(config.showBirthdate ? "dados" : "done");
+      setStep(CONFIG.showBirthdate ? "dados" : "done");
     } else {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "Erro ao enviar avaliação.");
@@ -83,19 +65,19 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">{config.thankyouTitle}</h2>
-              <p className="text-muted-foreground mt-2 text-sm">{config.thankyouMessage}</p>
+              <h2 className="text-xl font-bold">{CONFIG.thankyouTitle}</h2>
+              <p className="text-muted-foreground mt-2 text-sm">{CONFIG.thankyouMessage}</p>
             </div>
 
-            {config.instagramUrl && (
+            {INSTAGRAM_URL && (
               <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 rounded-2xl p-4 space-y-3">
                 <p className="text-white font-medium text-sm">Nos siga no Instagram e fique por dentro de promoções!</p>
-                <a href={config.instagramUrl} target="_blank" rel="noopener noreferrer"
+                <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer"
                   onClick={async () => {
                     await fetch("/api/feedback", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ token, tenantSlug, rating, instagramFollowed: true }),
+                      body: JSON.stringify({ token, rating, instagramFollowed: true }),
                     });
                   }}>
                   <Button className="bg-white text-pink-600 hover:bg-white/90 w-full gap-2 font-semibold">
@@ -148,7 +130,7 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
                   await fetch("/api/feedback", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ token, tenantSlug, rating, birthdate }),
+                    body: JSON.stringify({ token, rating, birthdate }),
                   });
                 }
                 setStep("done");
@@ -170,8 +152,8 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
             <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-3">
               <Star className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-xl font-bold">{config.title}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{config.subtitle}</p>
+            <h1 className="text-xl font-bold">{CONFIG.title}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{CONFIG.subtitle}</p>
           </div>
 
           {/* Rating */}
@@ -203,7 +185,7 @@ export default function AvaliacaoPage({ params }: { params: Promise<{ tenantSlug
           </div>
 
           {/* Comentário */}
-          {config.showComment && (
+          {CONFIG.showComment && (
             <div>
               <Label>Comentário <span className="text-muted-foreground text-xs">(opcional)</span></Label>
               <Textarea

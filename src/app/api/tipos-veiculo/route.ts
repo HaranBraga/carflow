@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 
 function generateKey(label: string): string {
   return label
@@ -13,8 +14,7 @@ function generateKey(label: string): string {
 }
 
 export async function GET() {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const types = await prisma.vehicleType.findMany({
@@ -25,8 +25,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const { label } = await req.json();
@@ -48,8 +47,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const { id, label } = await req.json();
@@ -65,8 +63,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const { searchParams } = new URL(req.url);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 import { z } from "zod";
 
 const orderSchema = z.object({
@@ -24,9 +25,8 @@ const orderSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  let prisma;
   try {
-    ({ prisma } = await getTenantPrisma());
+    await requireAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -74,9 +74,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let prisma, managerId, managerName;
+  let managerId, managerName;
   try {
-    ({ prisma, managerId, managerName } = await getTenantPrisma());
+    ({ id: managerId, name: managerName } = await requireAuth());
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

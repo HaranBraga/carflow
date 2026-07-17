@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 import { z } from "zod";
 
 const serviceSchema = z.object({
@@ -16,9 +17,8 @@ const serviceSchema = z.object({
 });
 
 export async function GET() {
-  let prisma;
   try {
-    ({ prisma } = await getTenantPrisma());
+    await requireAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -36,9 +36,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  let prisma;
   try {
-    ({ prisma } = await getTenantPrisma());
+    await requireAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -70,7 +69,7 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     const msg = e?.message || "Erro ao criar serviço";
     const hint = msg.includes("service_prices") || msg.includes("does not exist")
-      ? " (Dica: rode 'Sincronizar Schema' no /admin para criar as tabelas novas.)"
+      ? " (Dica: rode 'npx prisma db push' para sincronizar o schema do banco.)"
       : "";
     return NextResponse.json({ error: msg + hint }, { status: 500 });
   }

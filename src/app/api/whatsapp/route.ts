@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
-import { masterPrisma } from "@/lib/prisma-master";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 import { sendWhatsAppMessage, buildCarReadyMessage } from "@/lib/evolution";
 
 export async function POST(req: NextRequest) {
   try {
-    let prisma, evolutionApiUrl, evolutionApiKey, evolutionInstance, tenantId;
     try {
-      ({ prisma, evolutionApiUrl, evolutionApiKey, evolutionInstance, tenantId } = await getTenantPrisma());
+      await requireAuth();
     } catch {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -26,9 +25,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ sent: false, error: "Ordem não encontrada" }, { status: 404 });
     }
 
-    // Busca template customizado da empresa
-    const tenant = await masterPrisma.tenant.findUnique({
-      where: { id: tenantId },
+    const settings = await prisma.settings.findUnique({
+      where: { id: "default" },
       select: { whatsappTemplate: true },
     });
 
@@ -37,11 +35,11 @@ export async function POST(req: NextRequest) {
     const services = order.items.map((i) => i.service.name);
     const phone = order.vehicle.customer.phone;
 
-    const message = buildCarReadyMessage(customerName, plate, services, tenant?.whatsappTemplate);
+    const message = buildCarReadyMessage(customerName, plate, services, settings?.whatsappTemplate);
     const result = await sendWhatsAppMessage(phone, message, {
-      apiUrl: evolutionApiUrl,
-      apiKey: evolutionApiKey,
-      instance: evolutionInstance,
+      apiUrl: process.env.EVOLUTION_API_URL,
+      apiKey: process.env.EVOLUTION_API_KEY,
+      instance: process.env.EVOLUTION_INSTANCE,
     });
 
     if (result.sent) {

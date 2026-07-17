@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 import { startOfMonth, endOfMonth, subDays, subMonths } from "date-fns";
 
 const PERIODS: Record<string, number | null> = {
@@ -10,9 +11,8 @@ const PERIODS: Record<string, number | null> = {
 };
 
 export async function GET(req: NextRequest) {
-  let prisma;
   try {
-    ({ prisma } = await getTenantPrisma());
+    await requireAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -1,4 +1,5 @@
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { formatCurrency, ORDER_STATUS_LABELS, VEHICLE_CATEGORY_LABELS } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,12 +7,8 @@ import { Car, DollarSign, Users, TrendingUp, Clock, CheckCircle } from "lucide-r
 import { format, startOfDay, endOfDay } from "date-fns";
 
 export default async function DashboardPage() {
-  let prisma;
-  try {
-    ({ prisma } = await getTenantPrisma());
-  } catch {
-    redirect("/login");
-  }
+  const session = await auth();
+  if (!session?.user) redirect("/login");
 
   const today = new Date();
   const start = startOfDay(today);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 import { z } from "zod";
 
 const paymentItemSchema = z.object({
@@ -15,9 +16,8 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  let prisma;
   try {
-    ({ prisma } = await getTenantPrisma());
+    await requireAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

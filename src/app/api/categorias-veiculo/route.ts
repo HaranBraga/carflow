@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 
 export async function GET() {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const types = await prisma.vehicleType.findMany({
@@ -14,8 +14,7 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const updates: { category: string; label: string }[] = await req.json();

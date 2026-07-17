@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -11,8 +12,7 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const { id } = await params;
@@ -23,8 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  let prisma;
-  try { ({ prisma } = await getTenantPrisma()); }
+  try { await requireAuth(); }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   const { id } = await params;

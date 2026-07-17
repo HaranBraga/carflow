@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantPrisma } from "@/lib/prisma-tenant";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
 import { z } from "zod";
 
 const cashFlowSchema = z.object({
@@ -27,9 +28,8 @@ function buildDateRange(dateStr: string, period: string) {
 }
 
 export async function GET(req: NextRequest) {
-  let prisma;
   try {
-    ({ prisma } = await getTenantPrisma());
+    await requireAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -81,9 +81,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let prisma;
   try {
-    ({ prisma } = await getTenantPrisma());
+    await requireAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

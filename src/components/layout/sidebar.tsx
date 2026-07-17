@@ -3,40 +3,48 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Car, LayoutDashboard, DollarSign, Users,
-  BarChart2, LogOut, Menu, X, Wrench, History, Settings, TrendingUp, MoreHorizontal
+  BarChart2, LogOut, Menu, X, Wrench, History, Settings, TrendingUp, MoreHorizontal, UserCog
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { hasPermission, type PermissionUser } from "@/lib/permissions";
+
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "CarFlow ERP";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/entrada", label: "Entrada de Veículo", icon: Car },
-  { href: "/lavagem", label: "Painel de Lavagem", icon: Wrench },
-  { href: "/historico", label: "Lavagens do Dia", icon: History },
-  { href: "/financeiro", label: "Financeiro", icon: TrendingUp },
-  { href: "/clientes", label: "CRM / Clientes", icon: Users },
-  { href: "/servicos", label: "Serviços", icon: BarChart2 },
-  { href: "/configuracoes", label: "Configurações", icon: Settings },
-];
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, module: null },
+  { href: "/entrada", label: "Entrada de Veículo", icon: Car, module: "entrada" },
+  { href: "/lavagem", label: "Painel de Lavagem", icon: Wrench, module: "lavagem" },
+  { href: "/historico", label: "Lavagens do Dia", icon: History, module: "historico" },
+  { href: "/financeiro", label: "Financeiro", icon: TrendingUp, module: "financeiro" },
+  { href: "/clientes", label: "CRM / Clientes", icon: Users, module: "crm" },
+  { href: "/servicos", label: "Serviços", icon: BarChart2, module: "servicos" },
+  { href: "/configuracoes", label: "Configurações", icon: Settings, module: "configuracoes" },
+] as const;
 
 // Itens exibidos na bottom nav do celular
 const bottomNavItems = [
-  { href: "/", label: "Início", icon: LayoutDashboard },
-  { href: "/entrada", label: "Entrada", icon: Car },
-  { href: "/lavagem", label: "Lavagem", icon: Wrench },
-  { href: "/historico", label: "Histórico", icon: History },
-];
+  { href: "/", label: "Início", icon: LayoutDashboard, module: null },
+  { href: "/entrada", label: "Entrada", icon: Car, module: "entrada" },
+  { href: "/lavagem", label: "Lavagem", icon: Wrench, module: "lavagem" },
+  { href: "/historico", label: "Histórico", icon: History, module: "historico" },
+] as const;
 
 interface SidebarProps {
-  tenantName?: string;
   userName?: string;
+  isAdmin?: boolean;
+  permissions?: string[];
 }
 
-export function Sidebar({ tenantName, userName }: SidebarProps) {
+export function Sidebar({ userName, isAdmin, permissions }: SidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const user: PermissionUser = { isAdmin: !!isAdmin, permissions };
+
+  const visibleNavItems = navItems.filter((item) => !item.module || hasPermission(user, item.module as any));
+  const visibleBottomNavItems = bottomNavItems.filter((item) => !item.module || hasPermission(user, item.module as any));
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -45,7 +53,7 @@ export function Sidebar({ tenantName, userName }: SidebarProps) {
           <Car className="w-5 h-5 text-white" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-bold text-sm truncate">{tenantName || "CarFlow ERP"}</p>
+          <p className="font-bold text-sm truncate">{APP_NAME}</p>
           <p className="text-xs text-muted-foreground truncate">{userName}</p>
         </div>
         {/* Botão fechar no mobile */}
@@ -55,7 +63,7 @@ export function Sidebar({ tenantName, userName }: SidebarProps) {
       </div>
 
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon }) => (
+        {visibleNavItems.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -71,6 +79,21 @@ export function Sidebar({ tenantName, userName }: SidebarProps) {
             <span className="truncate">{label}</span>
           </Link>
         ))}
+        {isAdmin && (
+          <Link
+            href="/usuarios"
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+              pathname === "/usuarios"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+          >
+            <UserCog className="w-4 h-4 shrink-0" />
+            <span className="truncate">Usuários</span>
+          </Link>
+        )}
       </nav>
 
       <div className="p-3 border-t">
@@ -112,7 +135,7 @@ export function Sidebar({ tenantName, userName }: SidebarProps) {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex h-16">
-          {bottomNavItems.map(({ href, label, icon: Icon }) => {
+          {visibleBottomNavItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
             return (
               <Link

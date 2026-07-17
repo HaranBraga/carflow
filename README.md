@@ -34,13 +34,13 @@ docker run -d --name carflow_db \
   -e POSTGRES_DB=carflow_db \
   -p 5432:5432 postgres:16-alpine
 
-# Criar tabelas
-npm run db:migrate
-
 # Gerar cliente Prisma
 npm run db:generate
 
-# Popular com dados iniciais
+# Criar tabelas
+npm run db:push
+
+# Popular com dados iniciais (cria o usuário admin geral)
 npm run db:seed
 ```
 
@@ -51,8 +51,7 @@ npm run dev
 ```
 
 Acesse: http://localhost:3000
-- **Empresa:** `default`
-- **Email:** `admin@carflow.com`
+- **Usuário:** `admin`
 - **Senha:** `admin123`
 
 ---
@@ -137,13 +136,19 @@ GET        /api/health         — Health check (DB conectado?)
 
 ---
 
-## Multi-tenant (preparado para futuro)
+## Usuários e permissões
 
-O sistema já está arquitetado para multi-tenant:
-- Toda tabela tem `tenantId`
-- Autenticação valida `slug` da empresa + credenciais
-- No futuro, cada empresa pode ter seu próprio PostgreSQL schema ou banco completo
-- Migrations são centralizadas (atualizações vão para todos)
+O sistema usa um único banco de dados (`DATABASE_URL`). Login é feito por
+usuário/senha (tabela `users`), com dois níveis de acesso:
+- **Administrador** (`isAdmin`): acesso total, incluindo a tela `/usuarios`
+  para criar outros usuários e ajustar permissões.
+- **Usuário comum**: acesso apenas aos módulos liberados individualmente
+  (`permissions`), controlados por checkbox na tela de Usuários — Entrada,
+  Lavagem, Histórico, Financeiro, CRM, Serviços, Feedback, Previsão,
+  Configurações.
+
+Rode `npm run db:seed` após o primeiro `db:push` para criar o usuário admin
+geral (`admin` / `admin123` — troque a senha assim que possível).
 
 ---
 

@@ -17,9 +17,7 @@ export default function middleware(req: NextRequest) {
 
   if (
     path.startsWith("/api/auth") ||
-    path.startsWith("/api/admin") ||
     path.startsWith("/api/feedback") ||
-    path.startsWith("/admin") ||
     path.startsWith("/avaliacao") ||
     path === "/login"
   ) {
