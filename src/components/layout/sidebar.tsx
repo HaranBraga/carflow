@@ -14,7 +14,7 @@ import { hasPermission, type PermissionUser } from "@/lib/permissions";
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "CarFlow ERP";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, module: null },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, module: "dashboard" },
   { href: "/entrada", label: "Entrada de Veículo", icon: Car, module: "entrada" },
   { href: "/lavagem", label: "Painel de Lavagem", icon: Wrench, module: "lavagem" },
   { href: "/historico", label: "Lavagens do Dia", icon: History, module: "historico" },
@@ -26,7 +26,7 @@ const navItems = [
 
 // Itens exibidos na bottom nav do celular
 const bottomNavItems = [
-  { href: "/", label: "Início", icon: LayoutDashboard, module: null },
+  { href: "/", label: "Início", icon: LayoutDashboard, module: "dashboard" },
   { href: "/entrada", label: "Entrada", icon: Car, module: "entrada" },
   { href: "/lavagem", label: "Lavagem", icon: Wrench, module: "lavagem" },
   { href: "/historico", label: "Histórico", icon: History, module: "historico" },

@@ -5,10 +5,23 @@ import { formatCurrency, ORDER_STATUS_LABELS, VEHICLE_CATEGORY_LABELS } from "@/
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Car, DollarSign, Users, TrendingUp, Clock, CheckCircle } from "lucide-react";
 import { format, startOfDay, endOfDay } from "date-fns";
+import { MODULES, hasPermission, type PermissionUser } from "@/lib/permissions";
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  const user = session.user as unknown as PermissionUser;
+  if (!hasPermission(user, "dashboard")) {
+    const firstAllowed = MODULES.find((m) => m.key !== "dashboard" && hasPermission(user, m.key));
+    if (firstAllowed) redirect(firstAllowed.href);
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center gap-2">
+        <h1 className="text-lg font-semibold text-foreground">Sem acesso a nenhum módulo</h1>
+        <p className="text-muted-foreground text-sm">Fale com um administrador para liberar seu acesso.</p>
+      </div>
+    );
+  }
 
   const today = new Date();
   const start = startOfDay(today);

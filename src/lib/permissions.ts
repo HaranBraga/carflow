@@ -1,4 +1,5 @@
 export const MODULES = [
+  { key: "dashboard", label: "Dashboard (faturamento e valores globais)", href: "/" },
   { key: "entrada", label: "Entrada de Veículo", href: "/entrada" },
   { key: "lavagem", label: "Painel de Lavagem", href: "/lavagem" },
   { key: "historico", label: "Lavagens do Dia", href: "/historico" },
