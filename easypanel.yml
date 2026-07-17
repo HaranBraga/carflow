@@ -16,6 +16,10 @@ services:
       NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"  # Gere com: openssl rand -base64 32
       NEXTAUTH_URL: "https://seu-dominio.com"
       NEXT_PUBLIC_APP_URL: "https://seu-dominio.com"
+      ADMIN_USERNAME: "${ADMIN_USERNAME}"    # Usuário admin geral (npm run db:seed cria/atualiza)
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      ADMIN_NAME: "${ADMIN_NAME}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL}"
       EVOLUTION_API_URL: "${EVOLUTION_API_URL}"
       EVOLUTION_API_KEY: "${EVOLUTION_API_KEY}"
       EVOLUTION_INSTANCE: "${EVOLUTION_INSTANCE}"
@@ -31,8 +35,11 @@ services:
 # - DATABASE_URL: postgres://user:pass@host:5432/dbname
 # - NEXTAUTH_SECRET: string aleatória segura (mín. 32 chars)
 # - NEXTAUTH_URL: URL pública do app (com https)
+# - ADMIN_USERNAME / ADMIN_PASSWORD: credenciais do admin geral (usadas por "npm run db:seed",
+#   que precisa ser rodado uma vez pelo Terminal do serviço após o primeiro deploy)
 #
 # Opcionais (funcionalidades extras):
+# - ADMIN_NAME, ADMIN_EMAIL: nome/email do admin geral (default: "Administrador" / admin@carflow.com)
 # - EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE: WhatsApp
 # - OPENWEATHER_API_KEY: Previsão do tempo
 # - NEXT_PUBLIC_INSTAGRAM_URL: Link do Instagram no QR code de feedback

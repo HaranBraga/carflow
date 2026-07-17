@@ -147,8 +147,11 @@ usuário/senha (tabela `users`), com dois níveis de acesso:
   Lavagem, Histórico, Financeiro, CRM, Serviços, Feedback, Previsão,
   Configurações.
 
-Rode `npm run db:seed` após o primeiro `db:push` para criar o usuário admin
-geral (`admin` / `admin123` — troque a senha assim que possível).
+O usuário admin geral é configurado por variáveis de ambiente
+(`ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_NAME`, `ADMIN_EMAIL`) e criado —
+ou atualizado, se já existir — rodando `npm run db:seed` após o `db:push`.
+Rodar o seed de novo com uma senha diferente no `.env` atualiza a senha do
+admin.
 
 ---
 
@@ -159,6 +162,10 @@ geral (`admin` / `admin123` — troque a senha assim que possível).
 | `DATABASE_URL` | ✅ | URL do PostgreSQL |
 | `NEXTAUTH_SECRET` | ✅ | String secreta para JWT (mín. 32 chars) |
 | `NEXTAUTH_URL` | ✅ | URL pública do app |
+| `ADMIN_USERNAME` | ⬜ | Usuário de login do admin geral (default: `admin`) |
+| `ADMIN_PASSWORD` | ⬜ | Senha do admin geral (default: `admin123` — troque em produção) |
+| `ADMIN_NAME` | ⬜ | Nome do admin geral (default: `Administrador`) |
+| `ADMIN_EMAIL` | ⬜ | Email do admin geral (default: `admin@carflow.com`) |
 | `EVOLUTION_API_URL` | ⬜ | URL da sua instância Evolution (WhatsApp) |
 | `EVOLUTION_API_KEY` | ⬜ | Chave da Evolution API |
 | `EVOLUTION_INSTANCE` | ⬜ | Nome da instância |
